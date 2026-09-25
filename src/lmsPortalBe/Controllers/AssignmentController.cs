@@ -3,6 +3,7 @@ using AutoMapper;
 using lmsPortalBe.Data;
 using lmsPortalBe.DTOs.Course;
 using lmsPortalBe.Models;
+using lmsPortalBe.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,8 @@ namespace lmsPortalBe.Controllers
   [Route("api/[controller]")]
   public class AssignmentsController(
       ILmsPortalContext context,
-      IMapper mapper)
+      IMapper mapper,
+      IRichTextSanitizer richTextSanitizer)
       : CoursePortalControllerBase(context, mapper)
   {
 
@@ -159,7 +161,7 @@ namespace lmsPortalBe.Controllers
       {
         ModuleId = dto.ModuleId,
         Name = dto.Name,
-        Description = dto.Description,
+        Description = richTextSanitizer.Sanitize(dto.Description),
         DueDate = dto.DueDate,
       };
 
@@ -234,7 +236,7 @@ namespace lmsPortalBe.Controllers
 
       if (dto.Description is not null)
       {
-        assignment.Description = dto.Description;
+        assignment.Description = richTextSanitizer.Sanitize(dto.Description);
       }
 
       assignment.DueDate = dueDate;

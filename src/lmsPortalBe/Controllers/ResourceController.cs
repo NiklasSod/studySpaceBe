@@ -19,7 +19,8 @@ namespace lmsPortalBe.Controllers
       ILmsPortalContext context,
       IMapper mapper,
       UserManager<ApplicationUser> _userManager,
-      INotificationService _notifications)
+      INotificationService _notifications,
+      IRichTextSanitizer richTextSanitizer)
       : CoursePortalControllerBase(context, mapper)
   {
 
@@ -247,6 +248,7 @@ namespace lmsPortalBe.Controllers
       var resource = new Resource
       {
         DisplayName = dto.DisplayName,
+        Description = richTextSanitizer.Sanitize(dto.Description),
         CreatorId = CurrentUserId,
         Url = dto.Url,
         ActivityId = dto.ActivityId,
@@ -421,6 +423,10 @@ namespace lmsPortalBe.Controllers
 
       resource.Url = dto.Url ?? resource.Url;
       resource.DisplayName = dto.DisplayName ?? resource.DisplayName;
+      if (dto.Description is not null)
+      {
+        resource.Description = richTextSanitizer.Sanitize(dto.Description);
+      }
       resource.LastEditDate = DateTime.UtcNow;
 
       await _context.SaveChangesAsync();

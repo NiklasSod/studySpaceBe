@@ -99,6 +99,7 @@ builder.Services.AddAutoMapper(cfg => { }, typeof(AutoMapperProfile));
 
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddSingleton<IRichTextSanitizer, RichTextSanitizer>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 builder.Services.AddControllers();
