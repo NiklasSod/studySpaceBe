@@ -385,6 +385,32 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
   }
 
   [Fact]
+  public async Task UploadAudio_AsStudent_ReturnsForbidden()
+  {
+    var student = await RegisterAsync("resource.audio.student@example.com");
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources/audio",
+        student.AccessToken);
+
+    Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task UploadAudio_AsTeacher_WithoutFile_ReturnsBadRequest()
+  {
+    var teacher = await CreateTeacherAsync("resource.audio.teacher@example.com");
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources/audio",
+        teacher.AccessToken);
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+  }
+
+  [Fact]
   public async Task GetCourseResources_AsAdmin_ReturnsResources()
   {
     var teacher = await CreateTeacherAsync("resource.list.course.admin@example.com");

@@ -20,7 +20,8 @@ namespace lmsPortalBe.Controllers
       IMapper mapper,
       UserManager<ApplicationUser> _userManager,
       INotificationService _notifications,
-      IRichTextSanitizer richTextSanitizer)
+      IRichTextSanitizer richTextSanitizer,
+      ICloudinaryAudioService cloudinaryAudio)
       : CoursePortalControllerBase(context, mapper)
   {
 
@@ -184,6 +185,32 @@ namespace lmsPortalBe.Controllers
           .ToListAsync();
 
       return Ok(resources.Select(_mapper.Map<ResourceDto>));
+    }
+
+    [HttpPost("audio")]
+    [Authorize(Roles = "teacher,admin")]
+    public async Task<IActionResult> UploadAudio(IFormFile file)
+    {
+      if (file is null || file.Length == 0)
+      {
+        return BadRequest("No audio file was provided.");
+      }
+
+      const long maxBytes = 5 * 1024 * 1024;
+      if (file.Length > maxBytes)
+      {
+        return BadRequest("Audio file must be 5 MB or smaller.");
+      }
+
+      if (!IsAllowedAudioType(file.ContentType, file.FileName))
+      {
+        return BadRequest("Only audio files are allowed (mp3, webm, m4a, ogg, wav).");
+      }
+
+      await using var stream = file.OpenReadStream();
+      var url = await cloudinaryAudio.UploadAsync(stream, file.FileName, HttpContext.RequestAborted);
+
+      return Ok(new AudioUploadResponseDto { Url = url });
     }
 
     [HttpPost]
@@ -495,6 +522,17 @@ namespace lmsPortalBe.Controllers
       }
 
       return true;
+    }
+
+    private static bool IsAllowedAudioType(string? contentType, string fileName)
+    {
+      var extension = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
+      if (extension is "mp3" or "webm" or "m4a" or "ogg" or "wav" or "mp4" or "aac")
+      {
+        return true;
+      }
+
+      return contentType?.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) == true;
     }
   }
 }
