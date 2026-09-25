@@ -237,6 +237,61 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
   }
 
   [Fact]
+  public async Task CreateResource_WithDescription_SanitizesHtml()
+  {
+    var teacher = await CreateTeacherAsync("resource.create.description@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources",
+        teacher.AccessToken,
+        new CreateResourceRequestDto
+        {
+          DisplayName = "Slides",
+          Url = "https://example.com/slides.pdf",
+          CourseId = courseId,
+          Description = "<p>Use <strong>these</strong> slides</p><script>alert('x')</script>"
+        });
+
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Contains("<strong>these</strong>", body.Description);
+    Assert.DoesNotContain("<script", body.Description);
+  }
+
+  [Fact]
+  public async Task UpdateResource_Description_IsSanitized()
+  {
+    var teacher = await CreateTeacherAsync("resource.update.description@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Slides",
+      Url = "https://example.com/slides.pdf",
+      CourseId = courseId
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto
+        {
+          Description = "<p>Updated <em>notes</em></p><script>alert('x')</script>"
+        });
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Contains("<em>notes</em>", body.Description);
+    Assert.DoesNotContain("<script", body.Description);
+  }
+
+  [Fact]
   public async Task GetCourseResources_AsAdmin_ReturnsResources()
   {
     var teacher = await CreateTeacherAsync("resource.list.course.admin@example.com");
