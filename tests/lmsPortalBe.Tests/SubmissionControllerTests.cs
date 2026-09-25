@@ -108,14 +108,9 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     return body.Id;
   }
 
-  private async Task EnrollStudentAsync(string studentToken, int courseId)
+  private async Task EnrollStudentAsync(string studentToken, string teacherToken, int courseId, string studentEmail)
   {
-    var response = await SendAuthorizedAsync(
-        HttpMethod.Post,
-        "/api/courses/enroll",
-        studentToken,
-        new EnrollRequestDto { CourseId = courseId });
-    response.EnsureSuccessStatusCode();
+    await EnrollAndApproveAsync(studentToken, teacherToken, courseId, studentEmail);
   }
 
   private async Task<HttpResponseMessage> HandInAsync(string studentToken, int assignmentId, string content)
@@ -146,7 +141,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.enrolled.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.enrolled.student@example.com");
 
     var response = await HandInAsync(student.AccessToken, assignmentId, "My first draft answer.");
 
@@ -205,7 +200,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.pending.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.pending.student@example.com");
 
     var first = await HandInAsync(student.AccessToken, assignmentId, "First hand-in.");
     Assert.Equal(HttpStatusCode.Created, first.StatusCode);
@@ -224,7 +219,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.stale.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.stale.student@example.com");
 
     var first = await HandInAsync(student.AccessToken, assignmentId, "Draft.");
     var firstBody = await first.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
@@ -298,7 +293,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.conflict.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.conflict.student@example.com");
 
     var handIn = await HandInAsync(student.AccessToken, assignmentId, "First submission.");
     Assert.Equal(HttpStatusCode.Created, handIn.StatusCode);
@@ -320,7 +315,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.revision.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.revision.student@example.com");
 
     var first = await HandInAsync(student.AccessToken, assignmentId, "Draft attempt.");
     Assert.Equal(HttpStatusCode.Created, first.StatusCode);
@@ -362,7 +357,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.history.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.history.student@example.com");
 
     var first = await HandInAsync(student.AccessToken, assignmentId, "Draft attempt.");
     var firstBody = await first.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
@@ -401,7 +396,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.history.owner.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.history.owner.student@example.com");
 
     var first = await HandInAsync(student.AccessToken, assignmentId, "Draft.");
     var firstBody = await first.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
@@ -429,7 +424,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var owner = await CreateStudentAsync("sub.history.forbidden.owner@example.com");
-    await EnrollStudentAsync(owner.AccessToken, courseId);
+    await EnrollStudentAsync(owner.AccessToken, teacher.AccessToken, courseId, "sub.history.forbidden.owner@example.com");
     var first = await HandInAsync(owner.AccessToken, assignmentId, "Draft.");
     var firstBody = await first.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
     Assert.NotNull(firstBody);
@@ -453,7 +448,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.grade.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.grade.student@example.com");
 
     var handIn = await HandInAsync(student.AccessToken, assignmentId, "Final answer.");
     var submission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
@@ -484,7 +479,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacherA.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.other.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacherA.AccessToken, courseId, "sub.other.student@example.com");
 
     var handIn = await HandInAsync(student.AccessToken, assignmentId, "Answer.");
     var submission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
@@ -510,7 +505,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.invalid.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.invalid.student@example.com");
 
     var handIn = await HandInAsync(student.AccessToken, assignmentId, "Answer.");
     var submission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
@@ -534,14 +529,14 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var studentA = await CreateStudentAsync("sub.privacy.student.a@example.com");
-    await EnrollStudentAsync(studentA.AccessToken, courseId);
+    await EnrollStudentAsync(studentA.AccessToken, teacher.AccessToken, courseId, "sub.privacy.student.a@example.com");
     var handIn = await HandInAsync(studentA.AccessToken, assignmentId, "Student A's answer.");
     var submission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
     Assert.NotNull(submission);
 
     // A classmate must not be able to read Student A's submission.
     var studentB = await CreateStudentAsync("sub.privacy.student.b@example.com");
-    await EnrollStudentAsync(studentB.AccessToken, courseId);
+    await EnrollStudentAsync(studentB.AccessToken, teacher.AccessToken, courseId, "sub.privacy.student.b@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Get,
@@ -560,13 +555,13 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var studentA = await CreateStudentAsync("sub.mine.student.a@example.com");
-    await EnrollStudentAsync(studentA.AccessToken, courseId);
+    await EnrollStudentAsync(studentA.AccessToken, teacher.AccessToken, courseId, "sub.mine.student.a@example.com");
     var handInA = await HandInAsync(studentA.AccessToken, assignmentId, "Answer by A.");
     var submissionA = await handInA.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
     Assert.NotNull(submissionA);
 
     var studentB = await CreateStudentAsync("sub.mine.student.b@example.com");
-    await EnrollStudentAsync(studentB.AccessToken, courseId);
+    await EnrollStudentAsync(studentB.AccessToken, teacher.AccessToken, courseId, "sub.mine.student.b@example.com");
     var handInB = await HandInAsync(studentB.AccessToken, assignmentId, "Answer by B.");
     var submissionB = await handInB.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
     Assert.NotNull(submissionB);
@@ -594,7 +589,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.list.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.list.student@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Get,
@@ -613,7 +608,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.delete.owner.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.delete.owner.student@example.com");
 
     var handIn = await HandInAsync(student.AccessToken, assignmentId, "Answer.");
     var submission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
@@ -641,13 +636,13 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var studentA = await CreateStudentAsync("sub.delete.other.student.a@example.com");
-    await EnrollStudentAsync(studentA.AccessToken, courseId);
+    await EnrollStudentAsync(studentA.AccessToken, teacher.AccessToken, courseId, "sub.delete.other.student.a@example.com");
     var handIn = await HandInAsync(studentA.AccessToken, assignmentId, "Answer by A.");
     var submission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
     Assert.NotNull(submission);
 
     var studentB = await CreateStudentAsync("sub.delete.other.student.b@example.com");
-    await EnrollStudentAsync(studentB.AccessToken, courseId);
+    await EnrollStudentAsync(studentB.AccessToken, teacher.AccessToken, courseId, "sub.delete.other.student.b@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Delete,
@@ -666,7 +661,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.keep.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.keep.student@example.com");
 
     var handIn = await HandInAsync(student.AccessToken, assignmentId, "My work that must survive.");
     var submission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
@@ -699,7 +694,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
 
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
     var student = await CreateStudentAsync("sub.pendinglist.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.pendinglist.student@example.com");
     var handIn = await HandInAsync(student.AccessToken, assignmentId, "Please grade me.");
     var pendingSubmission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
     Assert.NotNull(pendingSubmission);
@@ -707,7 +702,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     // An already-approved submission must not appear as pending.
     var assignment2 = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
     var student2 = await CreateStudentAsync("sub.pendinglist.student2@example.com");
-    await EnrollStudentAsync(student2.AccessToken, courseId);
+    await EnrollStudentAsync(student2.AccessToken, teacher.AccessToken, courseId, "sub.pendinglist.student2@example.com");
     var handIn2 = await HandInAsync(student2.AccessToken, assignment2, "Already graded.");
     var graded = await handIn2.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);
     Assert.NotNull(graded);
@@ -731,7 +726,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentA = await CreateAssignmentAsync(teacherA.AccessToken, moduleA);
 
     var studentA = await CreateStudentAsync("sub.pending.student.a@example.com");
-    await EnrollStudentAsync(studentA.AccessToken, courseA);
+    await EnrollStudentAsync(studentA.AccessToken, teacherA.AccessToken, courseA, "sub.pending.student.a@example.com");
     var handInA = await HandInAsync(studentA.AccessToken, assignmentA, "A's pending submission.");
     Assert.Equal(HttpStatusCode.Created, handInA.StatusCode);
 
@@ -766,7 +761,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.astatus.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.astatus.student@example.com");
 
     // Not submitted yet -> no status/feedback/id.
     var before = await SendAuthorizedAsync(HttpMethod.Get, "/api/assignments/mine", student.AccessToken);
@@ -813,7 +808,7 @@ public class SubmissionsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
 
     var student = await CreateStudentAsync("sub.revstatus.student@example.com");
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "sub.revstatus.student@example.com");
 
     var handIn = await HandInAsync(student.AccessToken, assignmentId, "First attempt.");
     var submission = await handIn.Content.ReadFromJsonAsync<SubmissionDto>(TestContext.Current.CancellationToken);

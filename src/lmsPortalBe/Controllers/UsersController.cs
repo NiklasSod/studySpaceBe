@@ -45,12 +45,15 @@ namespace lmsPortalBe.Controllers
           ?? throw new UnauthorizedAccessException("User identity not found.");
 
       var query = _context.CourseEnrollments
-          .Where(e => e.Role == CourseRole.Student);
+          .Where(e => e.Role == CourseRole.Student
+              && e.Status == CourseEnrollmentStatus.Approved);
 
       if (!User.IsInRole("admin"))
       {
         var taughtCourseIds = await _context.CourseEnrollments
-            .Where(e => e.UserId == currentUserId && e.Role == CourseRole.Teacher)
+            .Where(e => e.UserId == currentUserId
+                && e.Role == CourseRole.Teacher
+                && e.Status == CourseEnrollmentStatus.Approved)
             .Select(e => e.CourseId)
             .ToListAsync();
 

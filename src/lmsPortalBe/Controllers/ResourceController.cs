@@ -44,7 +44,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserResources()
     {
       var enrolledCourseIds = await _context.CourseEnrollments
-          .Where(e => e.UserId == CurrentUserId)
+          .Where(e => e.UserId == CurrentUserId
+              && e.Status == CourseEnrollmentStatus.Approved)
           .Select(e => e.CourseId)
           .ToListAsync();
 

@@ -122,7 +122,7 @@ public class CourseControllerTests : ApiTestBase, IClassFixture<TestWebApplicati
   }
 
   [Fact]
-  public async Task Enroll_AsStudent_Succeeds()
+  public async Task Enroll_AsStudent_CreatesPendingRequest()
   {
     var teacher = await CreateTeacherAsync("course.teacher.enroll@example.com");
     var student = await RegisterAsync("course.student.enroll@example.com");
@@ -163,7 +163,7 @@ public class CourseControllerTests : ApiTestBase, IClassFixture<TestWebApplicati
   }
 
   [Fact]
-  public async Task Enroll_OverlappingCourse_ReturnsBadRequest()
+  public async Task Approve_OverlappingEnrollment_ReturnsBadRequest()
   {
     var teacher = await CreateTeacherAsync("course.teacher.overlap@example.com");
     var student = await RegisterAsync("course.student.overlap@example.com");
@@ -183,8 +183,22 @@ public class CourseControllerTests : ApiTestBase, IClassFixture<TestWebApplicati
         "/api/courses/enroll",
         student.AccessToken,
         new EnrollRequestDto { CourseId = overlappingCourseId });
+    Assert.Equal(HttpStatusCode.NoContent, overlapping.StatusCode);
 
-    Assert.Equal(HttpStatusCode.BadRequest, overlapping.StatusCode);
+    var studentId = await GetUserIdAsync("course.student.overlap@example.com");
+
+    var approveFirst = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        $"/api/courses/{firstCourseId}/enrollments/{studentId}/approve",
+        teacher.AccessToken);
+    Assert.Equal(HttpStatusCode.OK, approveFirst.StatusCode);
+
+    var approveOverlapping = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        $"/api/courses/{overlappingCourseId}/enrollments/{studentId}/approve",
+        teacher.AccessToken);
+
+    Assert.Equal(HttpStatusCode.BadRequest, approveOverlapping.StatusCode);
   }
 
   [Fact]
@@ -238,10 +252,35 @@ public class CourseControllerTests : ApiTestBase, IClassFixture<TestWebApplicati
   }
 
   [Fact]
-  public async Task GetCourse_ReturnsEnrolledUsers()
+  public async Task ApproveEnrollment_AsTeacher_StudentGainsAccess()
   {
-    var teacher = await CreateTeacherAsync("course.teacher.detail@example.com");
-    var student = await RegisterAsync("course.student.detail@example.com");
+    var teacher = await CreateTeacherAsync("course.teacher.approve@example.com");
+    var student = await RegisterAsync("course.student.approve@example.com");
+
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+
+    await EnrollAndApproveAsync(
+        student.AccessToken,
+        teacher.AccessToken,
+        courseId,
+        "course.student.approve@example.com");
+
+    var mine = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        "/api/courses/mine",
+        student.AccessToken);
+    Assert.Equal(HttpStatusCode.OK, mine.StatusCode);
+
+    var courses = await mine.Content.ReadFromJsonAsync<List<CourseSummaryDto>>(TestContext.Current.CancellationToken);
+    Assert.NotNull(courses);
+    Assert.Contains(courses, c => c.Id == courseId);
+  }
+
+  [Fact]
+  public async Task DenyEnrollment_AsTeacher_StudentDoesNotGainAccess()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.deny@example.com");
+    var student = await RegisterAsync("course.student.deny@example.com");
 
     var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
 
@@ -251,6 +290,107 @@ public class CourseControllerTests : ApiTestBase, IClassFixture<TestWebApplicati
         student.AccessToken,
         new EnrollRequestDto { CourseId = courseId });
     Assert.Equal(HttpStatusCode.NoContent, enroll.StatusCode);
+
+    var studentId = await GetUserIdAsync("course.student.deny@example.com");
+    var deny = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        $"/api/courses/{courseId}/enrollments/{studentId}/deny",
+        teacher.AccessToken);
+    Assert.Equal(HttpStatusCode.OK, deny.StatusCode);
+
+    var mine = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        "/api/courses/mine",
+        student.AccessToken);
+    Assert.Equal(HttpStatusCode.OK, mine.StatusCode);
+
+    var courses = await mine.Content.ReadFromJsonAsync<List<CourseSummaryDto>>(TestContext.Current.CancellationToken);
+    Assert.NotNull(courses);
+    Assert.DoesNotContain(courses, c => c.Id == courseId);
+  }
+
+  [Fact]
+  public async Task GetCourseEnrollments_AsTeacher_ReturnsPendingAndApproved()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.list@example.com");
+    var student = await RegisterAsync("course.student.list@example.com");
+
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+
+    var enroll = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/courses/enroll",
+        student.AccessToken,
+        new EnrollRequestDto { CourseId = courseId });
+    Assert.Equal(HttpStatusCode.NoContent, enroll.StatusCode);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        $"/api/courses/{courseId}/enrollments",
+        teacher.AccessToken);
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var enrollments = await response.Content.ReadFromJsonAsync<List<CourseEnrollmentDto>>(TestContext.Current.CancellationToken);
+    Assert.NotNull(enrollments);
+    Assert.Equal(2, enrollments.Count);
+    Assert.Contains(enrollments, e => e.Role == "Teacher" && e.Status == "Approved");
+    Assert.Contains(enrollments, e => e.Email == "course.student.list@example.com" && e.Status == "Pending");
+  }
+
+  [Fact]
+  public async Task GetCourseEnrollments_AsStudent_ReturnsForbidden()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.list.forbid@example.com");
+    var student = await RegisterAsync("course.student.list.forbid@example.com");
+
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        $"/api/courses/{courseId}/enrollments",
+        student.AccessToken);
+
+    Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task ApproveEnrollment_AsNonTeacher_ReturnsForbidden()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.approve.forbid@example.com");
+    var student = await RegisterAsync("course.student.approve.forbid@example.com");
+    var outsider = await RegisterAsync("course.student.approve.outsider@example.com");
+
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+
+    var enroll = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/courses/enroll",
+        student.AccessToken,
+        new EnrollRequestDto { CourseId = courseId });
+    Assert.Equal(HttpStatusCode.NoContent, enroll.StatusCode);
+
+    var studentId = await GetUserIdAsync("course.student.approve.forbid@example.com");
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        $"/api/courses/{courseId}/enrollments/{studentId}/approve",
+        outsider.AccessToken);
+
+    Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task GetCourse_ReturnsEnrolledUsers()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.detail@example.com");
+    var student = await RegisterAsync("course.student.detail@example.com");
+
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+
+    await EnrollAndApproveAsync(
+        student.AccessToken,
+        teacher.AccessToken,
+        courseId,
+        "course.student.detail@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Get,

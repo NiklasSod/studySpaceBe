@@ -77,6 +77,10 @@ namespace lmsPortalBe.Data
 
                 entity.HasIndex(e => new { e.UserId, e.CourseId }).IsUnique();
 
+                entity.Property(e => e.Status)
+                    .HasDefaultValue(CourseEnrollmentStatus.Approved)
+                    .ValueGeneratedNever();
+
                 entity.HasOne(e => e.User)
                     .WithMany(u => u.Enrollments)
                     .HasForeignKey(e => e.UserId)

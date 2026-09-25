@@ -13,15 +13,6 @@ public class UserProfileControllerTests : ApiTestBase, IClassFixture<TestWebAppl
   {
   }
 
-  private async Task<string> GetUserIdAsync(string email)
-  {
-    using var scope = Factory.Services.CreateScope();
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-    var user = await userManager.FindByEmailAsync(email);
-    Assert.NotNull(user);
-    return user.Id;
-  }
-
   private async Task<UserProfileDto> GetMyProfileAsync(string accessToken)
   {
     var response = await SendAuthorizedAsync(HttpMethod.Get, "/api/profiles/me", accessToken);

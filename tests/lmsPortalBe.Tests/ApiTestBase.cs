@@ -1,7 +1,11 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using lmsPortalBe.DTOs.Auth;
+using lmsPortalBe.DTOs.Course;
+using lmsPortalBe.Models;
 using lmsPortalBe.Services;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace lmsPortalBe.Tests;
 
@@ -103,5 +107,39 @@ public abstract class ApiTestBase
     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     request.Content = JsonContent.Create(body);
     return await Client.SendAsync(request, TestContext.Current.CancellationToken);
+  }
+
+  protected async Task<string> GetUserIdAsync(string email)
+  {
+    using var scope = Factory.Services.CreateScope();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var user = await userManager.FindByEmailAsync(email);
+    Assert.NotNull(user);
+    return user.Id;
+  }
+
+  /// <summary>
+  /// Requests enrollment on behalf of a student and approves it as the
+  /// course teacher, mirroring the approval workflow end to end.
+  /// </summary>
+  protected async Task EnrollAndApproveAsync(
+      string studentToken,
+      string teacherToken,
+      int courseId,
+      string studentEmail)
+  {
+    var enroll = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/courses/enroll",
+        studentToken,
+        new EnrollRequestDto { CourseId = courseId });
+    enroll.EnsureSuccessStatusCode();
+
+    var studentId = await GetUserIdAsync(studentEmail);
+    var approve = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        $"/api/courses/{courseId}/enrollments/{studentId}/approve",
+        teacherToken);
+    approve.EnsureSuccessStatusCode();
   }
 }

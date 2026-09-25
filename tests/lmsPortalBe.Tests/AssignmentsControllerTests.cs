@@ -486,12 +486,11 @@ public class AssignmentsControllerTests : ApiTestBase, IClassFixture<TestWebAppl
     var openAssignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId, now.AddDays(5));
 
     var student = await RegisterAsync("course.student.current@example.com");
-    var enroll = await SendAuthorizedAsync(
-        HttpMethod.Post,
-        "/api/courses/enroll",
+    await EnrollAndApproveAsync(
         student.AccessToken,
-        new EnrollRequestDto { CourseId = courseId });
-    enroll.EnsureSuccessStatusCode();
+        teacher.AccessToken,
+        courseId,
+        "course.student.current@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Get,
