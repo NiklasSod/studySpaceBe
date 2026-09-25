@@ -7,6 +7,7 @@ namespace lmsPortalBe.DTOs.Resource
         [Required]
         public string DisplayName { get; set; } = string.Empty;
         public string? Description { get; set; }
+        public List<string>? AudioUrls { get; set; }
         [Required]
         public string Url { get; set; } = string.Empty;
         public int? CourseId { get; set; }

@@ -245,10 +245,16 @@ namespace lmsPortalBe.Controllers
         }
       }
 
+      if (!TryNormalizeAudioUrls(dto.AudioUrls, out var audioUrls))
+      {
+        return BadRequest("audioUrls must only contain secure Cloudinary URLs (https://res.cloudinary.com/...).");
+      }
+
       var resource = new Resource
       {
         DisplayName = dto.DisplayName,
         Description = richTextSanitizer.Sanitize(dto.Description),
+        AudioUrls = audioUrls,
         CreatorId = CurrentUserId,
         Url = dto.Url,
         ActivityId = dto.ActivityId,
@@ -427,6 +433,15 @@ namespace lmsPortalBe.Controllers
       {
         resource.Description = richTextSanitizer.Sanitize(dto.Description);
       }
+      if (dto.AudioUrls is not null)
+      {
+        if (!TryNormalizeAudioUrls(dto.AudioUrls, out var audioUrls))
+        {
+          return BadRequest("audioUrls must only contain secure Cloudinary URLs (https://res.cloudinary.com/...).");
+        }
+
+        resource.AudioUrls = audioUrls;
+      }
       resource.LastEditDate = DateTime.UtcNow;
 
       await _context.SaveChangesAsync();
@@ -456,6 +471,30 @@ namespace lmsPortalBe.Controllers
       await _context.SaveChangesAsync();
 
       return NoContent();
+    }
+
+    private static bool TryNormalizeAudioUrls(List<string>? urls, out List<string> normalized)
+    {
+      normalized = [];
+      if (urls is null)
+      {
+        return true;
+      }
+
+      foreach (var url in urls)
+      {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || !string.Equals(uri.Host, "res.cloudinary.com", StringComparison.OrdinalIgnoreCase))
+        {
+          normalized = [];
+          return false;
+        }
+
+        normalized.Add(uri.AbsoluteUri);
+      }
+
+      return true;
     }
   }
 }
