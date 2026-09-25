@@ -292,6 +292,99 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
   }
 
   [Fact]
+  public async Task CreateResource_WithAudioUrls_StoresThemInOrder()
+  {
+    var teacher = await CreateTeacherAsync("resource.create.audio@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources",
+        teacher.AccessToken,
+        new CreateResourceRequestDto
+        {
+          DisplayName = "Slides",
+          Url = "https://example.com/slides.pdf",
+          CourseId = courseId,
+          AudioUrls =
+          [
+            "https://res.cloudinary.com/demo/video/upload/voice-1.mp3",
+            "https://res.cloudinary.com/demo/video/upload/voice-2.mp3"
+          ]
+        });
+
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Equal(2, body.AudioUrls.Count);
+    Assert.Contains(body.AudioUrls, u => u.EndsWith("voice-1.mp3"));
+    Assert.Contains(body.AudioUrls, u => u.EndsWith("voice-2.mp3"));
+  }
+
+  [Fact]
+  public async Task CreateResource_WithNonCloudinaryAudioUrl_ReturnsBadRequest()
+  {
+    var teacher = await CreateTeacherAsync("resource.create.audio.bad@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources",
+        teacher.AccessToken,
+        new CreateResourceRequestDto
+        {
+          DisplayName = "Slides",
+          Url = "https://example.com/slides.pdf",
+          CourseId = courseId,
+          AudioUrls = ["https://evil.example.com/voice.mp3"]
+        });
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task UpdateResource_AudioUrls_ReplacesList()
+  {
+    var teacher = await CreateTeacherAsync("resource.update.audio@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Slides",
+      Url = "https://example.com/slides.pdf",
+      CourseId = courseId
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto
+        {
+          AudioUrls = ["https://res.cloudinary.com/demo/video/upload/voice-1.mp3"]
+        });
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Single(body.AudioUrls);
+
+    // Sending an empty list clears the audio clips.
+    var clear = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto { AudioUrls = [] });
+
+    Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+
+    var cleared = await clear.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(cleared);
+    Assert.Empty(cleared.AudioUrls);
+  }
+
+  [Fact]
   public async Task GetCourseResources_AsAdmin_ReturnsResources()
   {
     var teacher = await CreateTeacherAsync("resource.list.course.admin@example.com");
