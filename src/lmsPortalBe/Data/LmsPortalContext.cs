@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace lmsPortalBe.Data
 {
@@ -77,6 +78,10 @@ namespace lmsPortalBe.Data
 
                 entity.HasIndex(e => new { e.UserId, e.CourseId }).IsUnique();
 
+                entity.Property(e => e.Status)
+                    .HasDefaultValue(CourseEnrollmentStatus.Approved)
+                    .ValueGeneratedNever();
+
                 entity.HasOne(e => e.User)
                     .WithMany(u => u.Enrollments)
                     .HasForeignKey(e => e.UserId)
@@ -107,6 +112,14 @@ namespace lmsPortalBe.Data
             builder.Entity<Resource>(entity =>
             {
                 entity.ToTable("lmsResource");
+
+                entity.Property(e => e.AudioUrls)
+                    .HasConversion(
+                        v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                        v => string.IsNullOrWhiteSpace(v)
+                            ? new List<string>()
+                            : JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>());
+
                 entity.HasOne(e => e.Creator)
                     .WithMany(c => c.Resources)
                     .HasForeignKey(e => e.CreatorId)

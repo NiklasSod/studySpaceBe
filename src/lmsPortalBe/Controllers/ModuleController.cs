@@ -3,17 +3,19 @@ using AutoMapper;
 using lmsPortalBe.Data;
 using lmsPortalBe.DTOs.Course;
 using lmsPortalBe.Models;
+using lmsPortalBe.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace lmsPortalBe.Controllers
 {
-  
+
   [Route("api/[controller]")]
   public class ModulesController(
       ILmsPortalContext context,
-      IMapper mapper) 
+      IMapper mapper,
+      IRichTextSanitizer richTextSanitizer)
       : CoursePortalControllerBase(context, mapper)
   {
 
@@ -31,7 +33,8 @@ namespace lmsPortalBe.Controllers
       else
       {
         var enrolledCourses = await _context.CourseEnrollments
-            .Where(e => e.UserId == CurrentUserId)
+            .Where(e => e.UserId == CurrentUserId
+                && e.Status == CourseEnrollmentStatus.Approved)
             .Select(e => e.CourseId)
             .ToListAsync();
 
@@ -48,7 +51,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserModules()
     {
       var enrolledCourses = await _context.CourseEnrollments
-        .Where(e => e.UserId == CurrentUserId)
+        .Where(e => e.UserId == CurrentUserId
+            && e.Status == CourseEnrollmentStatus.Approved)
         .Select(e => e.CourseId)
         .ToListAsync();
 
@@ -64,7 +68,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserCurrentModules()
     {
       var enrolledCourses = await _context.CourseEnrollments
-        .Where(e => e.UserId == CurrentUserId)
+        .Where(e => e.UserId == CurrentUserId
+            && e.Status == CourseEnrollmentStatus.Approved)
         .Select(e => e.CourseId)
         .ToListAsync();
 
@@ -103,7 +108,9 @@ namespace lmsPortalBe.Controllers
 
       var canView = User.IsInRole("admin")
           || await _context.CourseEnrollments
-              .AnyAsync(e => e.CourseId == courseId && e.UserId == CurrentUserId);
+              .AnyAsync(e => e.CourseId == courseId
+                  && e.UserId == CurrentUserId
+                  && e.Status == CourseEnrollmentStatus.Approved);
 
       if (!canView)
       {
@@ -150,7 +157,7 @@ namespace lmsPortalBe.Controllers
       {
         CourseId = dto.CourseId,
         Name = dto.Name,
-        Description = dto.Description,
+        Description = richTextSanitizer.Sanitize(dto.Description),
         StartDate = dto.StartDate,
         EndDate = dto.EndDate
       };
@@ -225,7 +232,7 @@ namespace lmsPortalBe.Controllers
 
       if (dto.Description is not null)
       {
-        module.Description = dto.Description;
+        module.Description = richTextSanitizer.Sanitize(dto.Description);
       }
 
       if (module.CourseId != courseId)
@@ -275,7 +282,8 @@ namespace lmsPortalBe.Controllers
       return await _context.CourseEnrollments
           .AnyAsync(e => e.CourseId == courseId
               && e.UserId == CurrentUserId
-              && e.Role == CourseRole.Teacher);
+              && e.Role == CourseRole.Teacher
+              && e.Status == CourseEnrollmentStatus.Approved);
     }
   }
 

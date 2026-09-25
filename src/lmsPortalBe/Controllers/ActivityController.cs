@@ -3,17 +3,19 @@ using AutoMapper;
 using lmsPortalBe.Data;
 using lmsPortalBe.DTOs.Course;
 using lmsPortalBe.Models;
+using lmsPortalBe.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace lmsPortalBe.Controllers
 {
-  
+
   [Route("api/[controller]")]
   public class ActivitiesController(
       ILmsPortalContext context,
-      IMapper mapper) 
+      IMapper mapper,
+      IRichTextSanitizer richTextSanitizer)
       : CoursePortalControllerBase(context, mapper)
   {
     [HttpGet]
@@ -31,7 +33,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserActivities()
     {
       var enrolledCourses = await _context.CourseEnrollments
-        .Where(e => e.UserId == CurrentUserId)
+        .Where(e => e.UserId == CurrentUserId
+            && e.Status == CourseEnrollmentStatus.Approved)
         .Select(e => e.CourseId)
         .ToListAsync();
 
@@ -124,7 +127,7 @@ namespace lmsPortalBe.Controllers
         ModuleId = dto.ModuleId,
         Name = dto.Name,
         ActivityType = type,
-        Description = dto.Description,
+        Description = richTextSanitizer.Sanitize(dto.Description),
         StartDate = dto.StartDate,
         EndDate = dto.EndDate
       };
@@ -218,7 +221,7 @@ namespace lmsPortalBe.Controllers
 
       if (dto.Description is not null)
       {
-        activity.Description = dto.Description;
+        activity.Description = richTextSanitizer.Sanitize(dto.Description);
       }
 
       activity.StartDate = startDate;

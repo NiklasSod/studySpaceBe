@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using lmsPortalBe.Data;
 
@@ -10,9 +11,11 @@ using lmsPortalBe.Data;
 namespace lmsPortalBe.Migrations
 {
     [DbContext(typeof(LmsPortalContext))]
-    partial class LmsPortalContextModelSnapshot : ModelSnapshot
+    [Migration("20260916184719_AddEnrollmentApproval")]
+    partial class AddEnrollmentApproval
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -457,18 +460,10 @@ namespace lmsPortalBe.Migrations
                     b.Property<int?>("ActivityId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("AudioUrls")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<int?>("CourseId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("CreatorId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("TEXT");
 

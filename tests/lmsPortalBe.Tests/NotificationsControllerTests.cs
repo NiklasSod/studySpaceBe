@@ -122,14 +122,9 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
     return body.Id;
   }
 
-  private async Task EnrollStudentAsync(string studentToken, int courseId)
+  private async Task EnrollStudentAsync(string studentToken, string teacherToken, int courseId, string studentEmail)
   {
-    var response = await SendAuthorizedAsync(
-        HttpMethod.Post,
-        "/api/courses/enroll",
-        studentToken,
-        new EnrollRequestDto { CourseId = courseId });
-    response.EnsureSuccessStatusCode();
+    await EnrollAndApproveAsync(studentToken, teacherToken, courseId, studentEmail);
   }
 
   private async Task<int> CreateResourceAsync(string teacherToken, CreateResourceRequestDto dto)
@@ -175,7 +170,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
 
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
-    await EnrollStudentAsync(enrolled.AccessToken, courseId);
+    await EnrollStudentAsync(enrolled.AccessToken, teacher.AccessToken, courseId, "notify.module.enrolled@example.com");
 
     var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
     {
@@ -203,7 +198,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
     var student = await CreateStudentAsync("notify.course.student@example.com");
 
     var courseId = await CreateCourseAsync(teacher.AccessToken);
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "notify.course.student@example.com");
 
     await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
     {
@@ -229,7 +224,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
     var activityId = await CreateActivityAsync(teacher.AccessToken, moduleId);
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "notify.activity.student@example.com");
 
     await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
     {
@@ -254,8 +249,8 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
 
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
-    await EnrollStudentAsync(uploader.AccessToken, courseId);
-    await EnrollStudentAsync(classmate.AccessToken, courseId);
+    await EnrollStudentAsync(uploader.AccessToken, teacher.AccessToken, courseId, "notify.upload.uploader@example.com");
+    await EnrollStudentAsync(classmate.AccessToken, teacher.AccessToken, courseId, "notify.upload.classmate@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Post,
@@ -282,7 +277,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "notify.approve.student@example.com");
 
     var handIn = await SendAuthorizedAsync(
         HttpMethod.Post,
@@ -315,7 +310,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
     var assignmentId = await CreateAssignmentAsync(teacher.AccessToken, moduleId);
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "notify.revision.student@example.com");
 
     var handIn = await SendAuthorizedAsync(
         HttpMethod.Post,
@@ -346,7 +341,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
 
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "notify.order.student@example.com");
 
     var first = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
     {
@@ -375,7 +370,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
 
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "notify.count.student@example.com");
 
     await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
     {
@@ -407,7 +402,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
 
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
-    await EnrollStudentAsync(owner.AccessToken, courseId);
+    await EnrollStudentAsync(owner.AccessToken, teacher.AccessToken, courseId, "notify.seen.owner@example.com");
 
     await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
     {
@@ -443,7 +438,7 @@ public class NotificationsControllerTests : ApiTestBase, IClassFixture<TestWebAp
 
     var courseId = await CreateCourseAsync(teacher.AccessToken);
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
-    await EnrollStudentAsync(student.AccessToken, courseId);
+    await EnrollStudentAsync(student.AccessToken, teacher.AccessToken, courseId, "notify.seenall.student@example.com");
 
     await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
     {

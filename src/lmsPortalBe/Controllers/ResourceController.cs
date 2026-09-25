@@ -19,7 +19,9 @@ namespace lmsPortalBe.Controllers
       ILmsPortalContext context,
       IMapper mapper,
       UserManager<ApplicationUser> _userManager,
-      INotificationService _notifications)
+      INotificationService _notifications,
+      IRichTextSanitizer richTextSanitizer,
+      ICloudinaryAudioService cloudinaryAudio)
       : CoursePortalControllerBase(context, mapper)
   {
 
@@ -44,7 +46,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserResources()
     {
       var enrolledCourseIds = await _context.CourseEnrollments
-          .Where(e => e.UserId == CurrentUserId)
+          .Where(e => e.UserId == CurrentUserId
+              && e.Status == CourseEnrollmentStatus.Approved)
           .Select(e => e.CourseId)
           .ToListAsync();
 
@@ -184,6 +187,32 @@ namespace lmsPortalBe.Controllers
       return Ok(resources.Select(_mapper.Map<ResourceDto>));
     }
 
+    [HttpPost("audio")]
+    [Authorize(Roles = "teacher,admin")]
+    public async Task<IActionResult> UploadAudio(IFormFile file)
+    {
+      if (file is null || file.Length == 0)
+      {
+        return BadRequest("No audio file was provided.");
+      }
+
+      const long maxBytes = 5 * 1024 * 1024;
+      if (file.Length > maxBytes)
+      {
+        return BadRequest("Audio file must be 5 MB or smaller.");
+      }
+
+      if (!IsAllowedAudioType(file.ContentType, file.FileName))
+      {
+        return BadRequest("Only audio files are allowed (mp3, webm, m4a, ogg, wav).");
+      }
+
+      await using var stream = file.OpenReadStream();
+      var url = await cloudinaryAudio.UploadAsync(stream, file.FileName, HttpContext.RequestAborted);
+
+      return Ok(new AudioUploadResponseDto { Url = url });
+    }
+
     [HttpPost]
     [Authorize]
     public async Task<IActionResult> CreateResource(CreateResourceRequestDto dto)
@@ -243,9 +272,16 @@ namespace lmsPortalBe.Controllers
         }
       }
 
+      if (!TryNormalizeAudioUrls(dto.AudioUrls, out var audioUrls))
+      {
+        return BadRequest("audioUrls must only contain secure Cloudinary URLs (https://res.cloudinary.com/...).");
+      }
+
       var resource = new Resource
       {
         DisplayName = dto.DisplayName,
+        Description = richTextSanitizer.Sanitize(dto.Description),
+        AudioUrls = audioUrls,
         CreatorId = CurrentUserId,
         Url = dto.Url,
         ActivityId = dto.ActivityId,
@@ -420,6 +456,19 @@ namespace lmsPortalBe.Controllers
 
       resource.Url = dto.Url ?? resource.Url;
       resource.DisplayName = dto.DisplayName ?? resource.DisplayName;
+      if (dto.Description is not null)
+      {
+        resource.Description = richTextSanitizer.Sanitize(dto.Description);
+      }
+      if (dto.AudioUrls is not null)
+      {
+        if (!TryNormalizeAudioUrls(dto.AudioUrls, out var audioUrls))
+        {
+          return BadRequest("audioUrls must only contain secure Cloudinary URLs (https://res.cloudinary.com/...).");
+        }
+
+        resource.AudioUrls = audioUrls;
+      }
       resource.LastEditDate = DateTime.UtcNow;
 
       await _context.SaveChangesAsync();
@@ -449,6 +498,41 @@ namespace lmsPortalBe.Controllers
       await _context.SaveChangesAsync();
 
       return NoContent();
+    }
+
+    private static bool TryNormalizeAudioUrls(List<string>? urls, out List<string> normalized)
+    {
+      normalized = [];
+      if (urls is null)
+      {
+        return true;
+      }
+
+      foreach (var url in urls)
+      {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme != Uri.UriSchemeHttps
+            || !string.Equals(uri.Host, "res.cloudinary.com", StringComparison.OrdinalIgnoreCase))
+        {
+          normalized = [];
+          return false;
+        }
+
+        normalized.Add(uri.AbsoluteUri);
+      }
+
+      return true;
+    }
+
+    private static bool IsAllowedAudioType(string? contentType, string fileName)
+    {
+      var extension = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
+      if (extension is "mp3" or "webm" or "m4a" or "ogg" or "wav" or "mp4" or "aac")
+      {
+        return true;
+      }
+
+      return contentType?.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) == true;
     }
   }
 }

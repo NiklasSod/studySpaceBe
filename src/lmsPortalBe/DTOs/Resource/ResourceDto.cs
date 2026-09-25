@@ -5,6 +5,8 @@ namespace lmsPortalBe.DTOs.Resource
         public int Id { get; init; } = 0;
         public string CreatorId { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public List<string> AudioUrls { get; set; } = [];
         public string Url { get; set; } = string.Empty;
         public bool IsStudentSubmitted { get; set; }
         public DateTime LastEditDate { get; set; }

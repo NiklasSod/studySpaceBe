@@ -9,7 +9,9 @@
 
 	<ItemGroup>
 		<PackageReference Include="AutoMapper" Version="16.2.0" />
+		<PackageReference Include="CloudinaryDotNet" Version="1.29.3" />
 		<PackageReference Include="DotNetEnv" Version="3.2.0" />
+		<PackageReference Include="HtmlSanitizer" Version="9.2.1039" />
 		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
 		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />

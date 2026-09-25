@@ -112,14 +112,9 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     return body.Id;
   }
 
-  private async Task EnrollAsync(string token, int courseId)
+  private async Task EnrollAsync(string studentToken, string teacherToken, int courseId, string studentEmail)
   {
-    var response = await SendAuthorizedAsync(
-        HttpMethod.Post,
-        "/api/courses/enroll",
-        token,
-        new EnrollRequestDto { CourseId = courseId });
-    Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    await EnrollAndApproveAsync(studentToken, teacherToken, courseId, studentEmail);
   }
 
   [Fact]
@@ -242,6 +237,180 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
   }
 
   [Fact]
+  public async Task CreateResource_WithDescription_SanitizesHtml()
+  {
+    var teacher = await CreateTeacherAsync("resource.create.description@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources",
+        teacher.AccessToken,
+        new CreateResourceRequestDto
+        {
+          DisplayName = "Slides",
+          Url = "https://example.com/slides.pdf",
+          CourseId = courseId,
+          Description = "<p>Use <strong>these</strong> slides</p><script>alert('x')</script>"
+        });
+
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Contains("<strong>these</strong>", body.Description);
+    Assert.DoesNotContain("<script", body.Description);
+  }
+
+  [Fact]
+  public async Task UpdateResource_Description_IsSanitized()
+  {
+    var teacher = await CreateTeacherAsync("resource.update.description@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Slides",
+      Url = "https://example.com/slides.pdf",
+      CourseId = courseId
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto
+        {
+          Description = "<p>Updated <em>notes</em></p><script>alert('x')</script>"
+        });
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Contains("<em>notes</em>", body.Description);
+    Assert.DoesNotContain("<script", body.Description);
+  }
+
+  [Fact]
+  public async Task CreateResource_WithAudioUrls_StoresThemInOrder()
+  {
+    var teacher = await CreateTeacherAsync("resource.create.audio@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources",
+        teacher.AccessToken,
+        new CreateResourceRequestDto
+        {
+          DisplayName = "Slides",
+          Url = "https://example.com/slides.pdf",
+          CourseId = courseId,
+          AudioUrls =
+          [
+            "https://res.cloudinary.com/demo/video/upload/voice-1.mp3",
+            "https://res.cloudinary.com/demo/video/upload/voice-2.mp3"
+          ]
+        });
+
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Equal(2, body.AudioUrls.Count);
+    Assert.Contains(body.AudioUrls, u => u.EndsWith("voice-1.mp3"));
+    Assert.Contains(body.AudioUrls, u => u.EndsWith("voice-2.mp3"));
+  }
+
+  [Fact]
+  public async Task CreateResource_WithNonCloudinaryAudioUrl_ReturnsBadRequest()
+  {
+    var teacher = await CreateTeacherAsync("resource.create.audio.bad@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources",
+        teacher.AccessToken,
+        new CreateResourceRequestDto
+        {
+          DisplayName = "Slides",
+          Url = "https://example.com/slides.pdf",
+          CourseId = courseId,
+          AudioUrls = ["https://evil.example.com/voice.mp3"]
+        });
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task UpdateResource_AudioUrls_ReplacesList()
+  {
+    var teacher = await CreateTeacherAsync("resource.update.audio@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Slides",
+      Url = "https://example.com/slides.pdf",
+      CourseId = courseId
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto
+        {
+          AudioUrls = ["https://res.cloudinary.com/demo/video/upload/voice-1.mp3"]
+        });
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Single(body.AudioUrls);
+
+    // Sending an empty list clears the audio clips.
+    var clear = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto { AudioUrls = [] });
+
+    Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+
+    var cleared = await clear.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(cleared);
+    Assert.Empty(cleared.AudioUrls);
+  }
+
+  [Fact]
+  public async Task UploadAudio_AsStudent_ReturnsForbidden()
+  {
+    var student = await RegisterAsync("resource.audio.student@example.com");
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources/audio",
+        student.AccessToken);
+
+    Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task UploadAudio_AsTeacher_WithoutFile_ReturnsBadRequest()
+  {
+    var teacher = await CreateTeacherAsync("resource.audio.teacher@example.com");
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources/audio",
+        teacher.AccessToken);
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+  }
+
+  [Fact]
   public async Task GetCourseResources_AsAdmin_ReturnsResources()
   {
     var teacher = await CreateTeacherAsync("resource.list.course.admin@example.com");
@@ -279,7 +448,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     });
 
     var student = await RegisterAsync("resource.student.enrolled@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.student.enrolled@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Get,
@@ -488,7 +657,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
 
     var student = await RegisterAsync("resource.student.submit.student@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.student.submit.student@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Post,
@@ -517,7 +686,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var courseId = await CreateCourseAsync(teacher.AccessToken);
 
     var student = await RegisterAsync("resource.student.course.student@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.student.course.student@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Post,
@@ -571,7 +740,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     });
 
     var student = await RegisterAsync("resource.module.exclude.student@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.module.exclude.student@example.com");
     var studentBody = await CreateStudentResourceAsync(student.AccessToken, moduleId, "Student upload");
 
     var response = await SendAuthorizedAsync(
@@ -595,9 +764,9 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
 
     var studentA = await RegisterAsync("resource.studentlist.a@example.com");
-    await EnrollAsync(studentA.AccessToken, courseId);
+    await EnrollAsync(studentA.AccessToken, teacher.AccessToken, courseId, "resource.studentlist.a@example.com");
     var studentB = await RegisterAsync("resource.studentlist.b@example.com");
-    await EnrollAsync(studentB.AccessToken, courseId);
+    await EnrollAsync(studentB.AccessToken, teacher.AccessToken, courseId, "resource.studentlist.b@example.com");
 
     var firstId = await CreateStudentResourceAsync(studentA.AccessToken, moduleId, "First upload");
     var secondId = await CreateStudentResourceAsync(studentB.AccessToken, moduleId, "Second upload");
@@ -626,9 +795,9 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
 
     var studentA = await RegisterAsync("resource.studentlist.own.a@example.com");
-    await EnrollAsync(studentA.AccessToken, courseId);
+    await EnrollAsync(studentA.AccessToken, teacher.AccessToken, courseId, "resource.studentlist.own.a@example.com");
     var studentB = await RegisterAsync("resource.studentlist.own.b@example.com");
-    await EnrollAsync(studentB.AccessToken, courseId);
+    await EnrollAsync(studentB.AccessToken, teacher.AccessToken, courseId, "resource.studentlist.own.b@example.com");
 
     var ownId = await CreateStudentResourceAsync(studentA.AccessToken, moduleId, "A upload");
     var otherId = await CreateStudentResourceAsync(studentB.AccessToken, moduleId, "B upload");
@@ -671,7 +840,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
 
     var student = await RegisterAsync("resource.mine.exclude.student@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.mine.exclude.student@example.com");
     var submittedId = await CreateStudentResourceAsync(student.AccessToken, moduleId, "Hidden upload");
 
     var response = await SendAuthorizedAsync(

@@ -6,6 +6,7 @@ namespace lmsPortalBe.Models
     public string UserId { get; set; } = string.Empty;
     public int CourseId { get; set; }
     public CourseRole Role { get; set; } = CourseRole.Student;
+    public CourseEnrollmentStatus Status { get; set; } = CourseEnrollmentStatus.Approved;
     public DateTime EnrolledAt { get; set; } = DateTime.UtcNow;
 
     public ApplicationUser User { get; set; } = null!;
