@@ -112,14 +112,9 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     return body.Id;
   }
 
-  private async Task EnrollAsync(string token, int courseId)
+  private async Task EnrollAsync(string studentToken, string teacherToken, int courseId, string studentEmail)
   {
-    var response = await SendAuthorizedAsync(
-        HttpMethod.Post,
-        "/api/courses/enroll",
-        token,
-        new EnrollRequestDto { CourseId = courseId });
-    Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    await EnrollAndApproveAsync(studentToken, teacherToken, courseId, studentEmail);
   }
 
   [Fact]
@@ -279,7 +274,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     });
 
     var student = await RegisterAsync("resource.student.enrolled@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.student.enrolled@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Get,
@@ -488,7 +483,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
 
     var student = await RegisterAsync("resource.student.submit.student@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.student.submit.student@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Post,
@@ -517,7 +512,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var courseId = await CreateCourseAsync(teacher.AccessToken);
 
     var student = await RegisterAsync("resource.student.course.student@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.student.course.student@example.com");
 
     var response = await SendAuthorizedAsync(
         HttpMethod.Post,
@@ -571,7 +566,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     });
 
     var student = await RegisterAsync("resource.module.exclude.student@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.module.exclude.student@example.com");
     var studentBody = await CreateStudentResourceAsync(student.AccessToken, moduleId, "Student upload");
 
     var response = await SendAuthorizedAsync(
@@ -595,9 +590,9 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
 
     var studentA = await RegisterAsync("resource.studentlist.a@example.com");
-    await EnrollAsync(studentA.AccessToken, courseId);
+    await EnrollAsync(studentA.AccessToken, teacher.AccessToken, courseId, "resource.studentlist.a@example.com");
     var studentB = await RegisterAsync("resource.studentlist.b@example.com");
-    await EnrollAsync(studentB.AccessToken, courseId);
+    await EnrollAsync(studentB.AccessToken, teacher.AccessToken, courseId, "resource.studentlist.b@example.com");
 
     var firstId = await CreateStudentResourceAsync(studentA.AccessToken, moduleId, "First upload");
     var secondId = await CreateStudentResourceAsync(studentB.AccessToken, moduleId, "Second upload");
@@ -626,9 +621,9 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
 
     var studentA = await RegisterAsync("resource.studentlist.own.a@example.com");
-    await EnrollAsync(studentA.AccessToken, courseId);
+    await EnrollAsync(studentA.AccessToken, teacher.AccessToken, courseId, "resource.studentlist.own.a@example.com");
     var studentB = await RegisterAsync("resource.studentlist.own.b@example.com");
-    await EnrollAsync(studentB.AccessToken, courseId);
+    await EnrollAsync(studentB.AccessToken, teacher.AccessToken, courseId, "resource.studentlist.own.b@example.com");
 
     var ownId = await CreateStudentResourceAsync(studentA.AccessToken, moduleId, "A upload");
     var otherId = await CreateStudentResourceAsync(studentB.AccessToken, moduleId, "B upload");
@@ -671,7 +666,7 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId);
 
     var student = await RegisterAsync("resource.mine.exclude.student@example.com");
-    await EnrollAsync(student.AccessToken, courseId);
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.mine.exclude.student@example.com");
     var submittedId = await CreateStudentResourceAsync(student.AccessToken, moduleId, "Hidden upload");
 
     var response = await SendAuthorizedAsync(

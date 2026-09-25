@@ -25,15 +25,18 @@ namespace lmsPortalBe.Controllers
         protected async Task<bool> IsCourseTeacherAsync(int courseId) =>
             await _context.CourseEnrollments.AnyAsync(e => e.CourseId == courseId
                 && e.UserId == CurrentUserId
-                && e.Role == CourseRole.Teacher);
+                && e.Role == CourseRole.Teacher
+                && e.Status == CourseEnrollmentStatus.Approved);
 
         protected async Task<bool> IsEnrolledAsync(int courseId) =>
             await _context.CourseEnrollments.AnyAsync(e => e.CourseId == courseId
-                && e.UserId == CurrentUserId);
+                && e.UserId == CurrentUserId
+                && e.Status == CourseEnrollmentStatus.Approved);
 
         protected async Task<bool> IsEnrolledAsStudentAsync(int courseId) =>
             await _context.CourseEnrollments.AnyAsync(e => e.CourseId == courseId
                 && e.UserId == CurrentUserId
-                && e.Role == CourseRole.Student);
+                && e.Role == CourseRole.Student
+                && e.Status == CourseEnrollmentStatus.Approved);
     }
 }

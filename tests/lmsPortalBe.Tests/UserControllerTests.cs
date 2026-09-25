@@ -34,15 +34,6 @@ public class UserControllerTests : ApiTestBase, IClassFixture<TestWebApplication
     return await LoginAsync(email, "Passw0rd1");
   }
 
-  private async Task<string> GetUserIdAsync(string email)
-  {
-    using var scope = Factory.Services.CreateScope();
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-    var user = await userManager.FindByEmailAsync(email);
-    Assert.NotNull(user);
-    return user.Id;
-  }
-
   [Fact]
   public async Task UpdateUser_AsAdmin_UpdatesStudentNamesAndEmail()
   {
@@ -231,12 +222,11 @@ public class UserControllerTests : ApiTestBase, IClassFixture<TestWebApplication
     createCourse.EnsureSuccessStatusCode();
     var course = await createCourse.Content.ReadFromJsonAsync<CourseSummaryDto>(TestContext.Current.CancellationToken);
 
-    var enroll = await SendAuthorizedAsync(
-        HttpMethod.Post,
-        "/api/courses/enroll",
+    await EnrollAndApproveAsync(
         student.AccessToken,
-        new EnrollRequestDto { CourseId = course!.Id });
-    enroll.EnsureSuccessStatusCode();
+        teacher.AccessToken,
+        course!.Id,
+        "students.mine@example.com");
 
     var response = await SendAuthorizedAsync(HttpMethod.Get, "/api/users/students", teacher.AccessToken);
 

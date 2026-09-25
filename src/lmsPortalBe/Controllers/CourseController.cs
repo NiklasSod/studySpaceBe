@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace lmsPortalBe.Controllers
 {
-  
+
   [Route("api/[controller]")]
   public class CoursesController(
       ILmsPortalContext context,
-      IMapper mapper) 
+      IMapper mapper)
       : CoursePortalControllerBase(context, mapper)
   {
 
@@ -31,7 +31,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserCourses()
     {
       var enrolledCourseIds = await _context.CourseEnrollments
-          .Where(e => e.UserId == CurrentUserId)
+          .Where(e => e.UserId == CurrentUserId
+              && e.Status == CourseEnrollmentStatus.Approved)
           .Select(e => e.CourseId)
           .ToListAsync();
 
@@ -59,11 +60,20 @@ namespace lmsPortalBe.Controllers
 
       var dto = _mapper.Map<CourseDetailDto>(course);
 
+      // The roster only ever contains approved members; pending enrollment
+      // requests are surfaced through the dedicated enrollments endpoint.
+      dto.Enrollments = course.Enrollments
+          .Where(e => e.Status == CourseEnrollmentStatus.Approved)
+          .Select(_mapper.Map<CourseEnrollmentDto>)
+          .ToList();
+
       // Only members (or admins) may see the roster; everyone else gets the
       // course metadata without the enrolled students.
       var canViewRoster = User.IsInRole("admin")
           || await _context.CourseEnrollments
-              .AnyAsync(e => e.CourseId == id && e.UserId == CurrentUserId);
+              .AnyAsync(e => e.CourseId == id
+                  && e.UserId == CurrentUserId
+                  && e.Status == CourseEnrollmentStatus.Approved);
 
       if (!canViewRoster)
       {
@@ -161,10 +171,17 @@ namespace lmsPortalBe.Controllers
       var userId = CurrentUserId;
       var role = User.IsInRole("teacher") || User.IsInRole("admin") ? CourseRole.Teacher : CourseRole.Student;
 
-      if (await _context.CourseEnrollments
-              .AnyAsync(e => e.UserId == userId && e.CourseId == course.Id))
+      var existing = await _context.CourseEnrollments
+          .FirstOrDefaultAsync(e => e.UserId == userId && e.CourseId == course.Id);
+
+      if (existing is not null)
       {
-        return BadRequest("Already enrolled in this course.");
+        return existing.Status switch
+        {
+          CourseEnrollmentStatus.Pending => BadRequest("Your enrollment request is pending teacher approval."),
+          CourseEnrollmentStatus.Denied => BadRequest("Your enrollment request was denied by the teacher."),
+          _ => BadRequest("Already enrolled in this course.")
+        };
       }
 
       if (role == CourseRole.Student)
@@ -172,6 +189,7 @@ namespace lmsPortalBe.Controllers
         var hasOverlap = await _context.CourseEnrollments
             .Include(e => e.Course)
             .AnyAsync(e => e.UserId == userId
+                && e.Status == CourseEnrollmentStatus.Approved
                 && e.Course.StartDate <= course.EndDate
                 && course.StartDate <= e.Course.EndDate);
 
@@ -185,12 +203,99 @@ namespace lmsPortalBe.Controllers
       {
         CourseId = course.Id,
         UserId = userId,
-        Role = role
+        Role = role,
+        Status = role == CourseRole.Student
+            ? CourseEnrollmentStatus.Pending
+            : CourseEnrollmentStatus.Approved
       });
 
       await _context.SaveChangesAsync();
 
       return NoContent();
+    }
+
+    [HttpGet("{id:int}/enrollments")]
+    [Authorize(Roles = "teacher,admin")]
+    public async Task<IActionResult> GetCourseEnrollments(int id)
+    {
+      if (!User.IsInRole("admin") && !await IsCourseTeacherAsync(id))
+      {
+        return Forbid();
+      }
+
+      var enrollments = await _context.CourseEnrollments
+          .Include(e => e.User)
+          .Where(e => e.CourseId == id)
+          .OrderBy(e => e.Status)
+          .ThenBy(e => e.EnrolledAt)
+          .ToListAsync();
+
+      return Ok(enrollments.Select(_mapper.Map<CourseEnrollmentDto>));
+    }
+
+    [HttpPost("{id:int}/enrollments/{userId}/approve")]
+    [Authorize(Roles = "teacher,admin")]
+    public async Task<IActionResult> ApproveEnrollment(int id, string userId) =>
+        await DecideEnrollmentAsync(id, userId, approve: true);
+
+    [HttpPost("{id:int}/enrollments/{userId}/deny")]
+    [Authorize(Roles = "teacher,admin")]
+    public async Task<IActionResult> DenyEnrollment(int id, string userId) =>
+        await DecideEnrollmentAsync(id, userId, approve: false);
+
+    private async Task<IActionResult> DecideEnrollmentAsync(int courseId, string userId, bool approve)
+    {
+      if (!User.IsInRole("admin") && !await IsCourseTeacherAsync(courseId))
+      {
+        return Forbid();
+      }
+
+      var enrollment = await _context.CourseEnrollments
+          .Include(e => e.User)
+          .Include(e => e.Course)
+          .FirstOrDefaultAsync(e => e.CourseId == courseId && e.UserId == userId);
+
+      if (enrollment is null)
+      {
+        return NotFound("Enrollment request not found.");
+      }
+
+      if (approve)
+      {
+        if (enrollment.Status == CourseEnrollmentStatus.Approved)
+        {
+          return BadRequest("This enrollment is already approved.");
+        }
+
+        var hasOverlap = await _context.CourseEnrollments
+            .Include(e => e.Course)
+            .AnyAsync(e => e.UserId == userId
+                && e.Id != enrollment.Id
+                && e.Status == CourseEnrollmentStatus.Approved
+                && e.Course.StartDate <= enrollment.Course.EndDate
+                && enrollment.Course.StartDate <= e.Course.EndDate);
+
+        if (hasOverlap)
+        {
+          return BadRequest("Cannot approve the request: the student's schedule overlaps with this course.");
+        }
+
+        enrollment.Status = CourseEnrollmentStatus.Approved;
+        enrollment.EnrolledAt = DateTime.UtcNow;
+      }
+      else
+      {
+        if (enrollment.Status == CourseEnrollmentStatus.Denied)
+        {
+          return BadRequest("This enrollment is already denied.");
+        }
+
+        enrollment.Status = CourseEnrollmentStatus.Denied;
+      }
+
+      await _context.SaveChangesAsync();
+
+      return Ok(_mapper.Map<CourseEnrollmentDto>(enrollment));
     }
 
     [HttpDelete("{id:int}")]

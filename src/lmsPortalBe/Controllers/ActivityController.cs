@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace lmsPortalBe.Controllers
 {
-  
+
   [Route("api/[controller]")]
   public class ActivitiesController(
       ILmsPortalContext context,
-      IMapper mapper) 
+      IMapper mapper)
       : CoursePortalControllerBase(context, mapper)
   {
     [HttpGet]
@@ -31,7 +31,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserActivities()
     {
       var enrolledCourses = await _context.CourseEnrollments
-        .Where(e => e.UserId == CurrentUserId)
+        .Where(e => e.UserId == CurrentUserId
+            && e.Status == CourseEnrollmentStatus.Approved)
         .Select(e => e.CourseId)
         .ToListAsync();
 

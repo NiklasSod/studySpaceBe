@@ -31,7 +31,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserAssignments()
     {
       var enrolledCourses = await _context.CourseEnrollments
-        .Where(e => e.UserId == CurrentUserId)
+        .Where(e => e.UserId == CurrentUserId
+            && e.Status == CourseEnrollmentStatus.Approved)
         .Select(e => e.CourseId)
         .ToListAsync();
 
@@ -46,7 +47,8 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> GetUserCurrentAssignments()
     {
       var enrolledCourses = await _context.CourseEnrollments
-          .Where(e => e.UserId == CurrentUserId)
+          .Where(e => e.UserId == CurrentUserId
+              && e.Status == CourseEnrollmentStatus.Approved)
           .Select(e => e.CourseId)
           .ToListAsync();
 
