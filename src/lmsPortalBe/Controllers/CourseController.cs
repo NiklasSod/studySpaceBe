@@ -260,13 +260,13 @@ namespace lmsPortalBe.Controllers
         return NotFound("Enrollment request not found.");
       }
 
-      if (enrollment.Status != CourseEnrollmentStatus.Pending)
-      {
-        return BadRequest("This enrollment request has already been decided.");
-      }
-
       if (approve)
       {
+        if (enrollment.Status == CourseEnrollmentStatus.Approved)
+        {
+          return BadRequest("This enrollment is already approved.");
+        }
+
         var hasOverlap = await _context.CourseEnrollments
             .Include(e => e.Course)
             .AnyAsync(e => e.UserId == userId
@@ -285,6 +285,11 @@ namespace lmsPortalBe.Controllers
       }
       else
       {
+        if (enrollment.Status == CourseEnrollmentStatus.Denied)
+        {
+          return BadRequest("This enrollment is already denied.");
+        }
+
         enrollment.Status = CourseEnrollmentStatus.Denied;
       }
 

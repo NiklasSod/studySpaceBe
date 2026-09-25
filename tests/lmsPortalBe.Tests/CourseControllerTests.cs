@@ -310,6 +310,47 @@ public class CourseControllerTests : ApiTestBase, IClassFixture<TestWebApplicati
   }
 
   [Fact]
+  public async Task ApproveEnrollment_AfterDenial_GrantsAccess()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.reconsider@example.com");
+    var student = await RegisterAsync("course.student.reconsider@example.com");
+
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+
+    var enroll = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/courses/enroll",
+        student.AccessToken,
+        new EnrollRequestDto { CourseId = courseId });
+    Assert.Equal(HttpStatusCode.NoContent, enroll.StatusCode);
+
+    var studentId = await GetUserIdAsync("course.student.reconsider@example.com");
+
+    var deny = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        $"/api/courses/{courseId}/enrollments/{studentId}/deny",
+        teacher.AccessToken);
+    Assert.Equal(HttpStatusCode.OK, deny.StatusCode);
+
+    // The teacher changes their mind and approves the previously denied request.
+    var approve = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        $"/api/courses/{courseId}/enrollments/{studentId}/approve",
+        teacher.AccessToken);
+    Assert.Equal(HttpStatusCode.OK, approve.StatusCode);
+
+    var mine = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        "/api/courses/mine",
+        student.AccessToken);
+    Assert.Equal(HttpStatusCode.OK, mine.StatusCode);
+
+    var courses = await mine.Content.ReadFromJsonAsync<List<CourseSummaryDto>>(TestContext.Current.CancellationToken);
+    Assert.NotNull(courses);
+    Assert.Contains(courses, c => c.Id == courseId);
+  }
+
+  [Fact]
   public async Task GetCourseEnrollments_AsTeacher_ReturnsPendingAndApproved()
   {
     var teacher = await CreateTeacherAsync("course.teacher.list@example.com");
