@@ -128,6 +128,7 @@ namespace lmsPortalBe.Controllers
         Name = dto.Name,
         ActivityType = type,
         Description = richTextSanitizer.Sanitize(dto.Description),
+        IsAlwaysActive = dto.IsAlwaysActive,
         StartDate = dto.StartDate,
         EndDate = dto.EndDate
       };
@@ -222,6 +223,11 @@ namespace lmsPortalBe.Controllers
       if (dto.Description is not null)
       {
         activity.Description = richTextSanitizer.Sanitize(dto.Description);
+      }
+
+      if (dto.IsAlwaysActive is not null)
+      {
+        activity.IsAlwaysActive = dto.IsAlwaysActive.Value;
       }
 
       activity.StartDate = startDate;

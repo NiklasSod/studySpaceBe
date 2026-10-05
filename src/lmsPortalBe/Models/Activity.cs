@@ -8,6 +8,7 @@ namespace lmsPortalBe.Models
         public ActivityType ActivityType { get; set; } = ActivityType.Lecture;
         public string Name { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public bool IsAlwaysActive { get; set; } = false;
         public DateTime StartDate { get; set; } = DateTime.UtcNow;
         public DateTime EndDate { get; set; } = DateTime.UtcNow;
         public ICollection<Resource> Resources { get; set; } = [];

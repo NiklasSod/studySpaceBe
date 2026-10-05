@@ -17,6 +17,8 @@ public class ActivityDto
   [Required]
   public string Description { get; set; } = string.Empty;
 
+  public bool IsAlwaysActive { get; set; }
+
   [Required]
   public DateTime StartDate { get; set; } = DateTime.UtcNow;
 
