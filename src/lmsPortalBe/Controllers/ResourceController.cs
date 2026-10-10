@@ -284,6 +284,8 @@ namespace lmsPortalBe.Controllers
         AudioUrls = audioUrls,
         CreatorId = CurrentUserId,
         Url = dto.Url,
+        IsInteractiveImage = dto.IsInteractiveImage,
+        Points = dto.Points is null ? [] : _mapper.Map<List<ImagePoint>>(dto.Points),
         ActivityId = dto.ActivityId,
         CourseId = dto.CourseId,
         ModuleId = dto.ModuleId,
@@ -456,6 +458,14 @@ namespace lmsPortalBe.Controllers
 
       resource.Url = dto.Url ?? resource.Url;
       resource.DisplayName = dto.DisplayName ?? resource.DisplayName;
+      if (dto.IsInteractiveImage is not null)
+      {
+        resource.IsInteractiveImage = dto.IsInteractiveImage.Value;
+      }
+      if (dto.Points is not null)
+      {
+        resource.Points = _mapper.Map<List<ImagePoint>>(dto.Points);
+      }
       if (dto.Description is not null)
       {
         resource.Description = richTextSanitizer.Sanitize(dto.Description);

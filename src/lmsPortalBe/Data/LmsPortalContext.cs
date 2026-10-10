@@ -120,6 +120,13 @@ namespace lmsPortalBe.Data
                             ? new List<string>()
                             : JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>());
 
+                entity.Property(e => e.Points)
+                    .HasConversion(
+                        v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                        v => string.IsNullOrWhiteSpace(v)
+                            ? new List<ImagePoint>()
+                            : JsonSerializer.Deserialize<List<ImagePoint>>(v, (JsonSerializerOptions?)null) ?? new List<ImagePoint>());
+
                 entity.HasOne(e => e.Creator)
                     .WithMany(c => c.Resources)
                     .HasForeignKey(e => e.CreatorId)
