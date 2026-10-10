@@ -385,6 +385,111 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
   }
 
   [Fact]
+  public async Task CreateResource_InteractiveImage_StoresPoints()
+  {
+    var teacher = await CreateTeacherAsync("resource.create.image@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources",
+        teacher.AccessToken,
+        new CreateResourceRequestDto
+        {
+          DisplayName = "Anatomy diagram",
+          Url = "https://example.com/anatomy.png",
+          CourseId = courseId,
+          IsInteractiveImage = true,
+          Points =
+          [
+            new ImagePointDto { X = 0.25, Y = 0.5, Text = "Heart", AudioUrl = "https://res.cloudinary.com/demo/raw/upload/heart.mp3" },
+            new ImagePointDto { X = 0.75, Y = 0.2, Text = "Lung", AudioUrl = "https://res.cloudinary.com/demo/raw/upload/lung.mp3" }
+          ]
+        });
+
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.True(body.IsInteractiveImage);
+    Assert.Equal(2, body.Points.Count);
+
+    var heart = body.Points[0];
+    Assert.Equal(0.25, heart.X);
+    Assert.Equal(0.5, heart.Y);
+    Assert.Equal("Heart", heart.Text);
+    Assert.Equal("https://res.cloudinary.com/demo/raw/upload/heart.mp3", heart.AudioUrl);
+  }
+
+  [Fact]
+  public async Task CreateResource_InteractiveImage_PointOutsideRange_ReturnsBadRequest()
+  {
+    var teacher = await CreateTeacherAsync("resource.create.image.range@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/resources",
+        teacher.AccessToken,
+        new CreateResourceRequestDto
+        {
+          DisplayName = "Anatomy diagram",
+          Url = "https://example.com/anatomy.png",
+          CourseId = courseId,
+          IsInteractiveImage = true,
+          Points = [new ImagePointDto { X = 1.5, Y = 0.5, Text = "Off the edge" }]
+        });
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+  }
+
+  [Fact]
+  public async Task UpdateResource_InteractiveImage_SetsPointsAndFlag()
+  {
+    var teacher = await CreateTeacherAsync("resource.update.image@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Slides",
+      Url = "https://example.com/slides.pdf",
+      CourseId = courseId
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto
+        {
+          IsInteractiveImage = true,
+          Points = [new ImagePointDto { X = 0.5, Y = 0.5, Text = "Center", AudioUrl = "https://res.cloudinary.com/demo/raw/upload/center.mp3" }]
+        });
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.True(body.IsInteractiveImage);
+    var point = Assert.Single(body.Points);
+    Assert.Equal(0.5, point.X);
+    Assert.Equal("Center", point.Text);
+
+    // Clearing the points and the flag returns it to a plain resource.
+    var clear = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto { IsInteractiveImage = false, Points = [] });
+
+    Assert.Equal(HttpStatusCode.OK, clear.StatusCode);
+
+    var cleared = await clear.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(cleared);
+    Assert.False(cleared.IsInteractiveImage);
+    Assert.Empty(cleared.Points);
+  }
+
+  [Fact]
   public async Task UploadAudio_AsStudent_ReturnsForbidden()
   {
     var student = await RegisterAsync("resource.audio.student@example.com");

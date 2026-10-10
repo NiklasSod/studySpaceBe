@@ -21,7 +21,8 @@ namespace lmsPortalBe.Controllers
       UserManager<ApplicationUser> _userManager,
       INotificationService _notifications,
       IRichTextSanitizer richTextSanitizer,
-      ICloudinaryAudioService cloudinaryAudio)
+      ICloudinaryAudioService cloudinaryAudio,
+      IVercelBlobService vercelBlob)
       : CoursePortalControllerBase(context, mapper)
   {
 
@@ -211,6 +212,38 @@ namespace lmsPortalBe.Controllers
       var url = await cloudinaryAudio.UploadAsync(stream, file.FileName, HttpContext.RequestAborted);
 
       return Ok(new AudioUploadResponseDto { Url = url });
+    }
+
+    [HttpPost("image")]
+    [Authorize(Roles = "teacher,admin")]
+    public async Task<IActionResult> UploadImage(IFormFile file)
+    {
+      if (file is null || file.Length == 0)
+      {
+        return BadRequest("No image file was provided.");
+      }
+
+      const long maxBytes = 1024 * 1024;
+      if (file.Length > maxBytes)
+      {
+        return BadRequest("Image must be 1 MB or smaller.");
+      }
+
+      if (!IsAllowedImageType(file.ContentType, file.FileName))
+      {
+        return BadRequest("Only image files are allowed (jpeg, png, webp, gif).");
+      }
+
+      using var memory = new MemoryStream();
+      await file.CopyToAsync(memory, HttpContext.RequestAborted);
+
+      var url = await vercelBlob.UploadAsync(
+          memory.ToArray(),
+          file.FileName,
+          file.ContentType ?? "image/webp",
+          HttpContext.RequestAborted);
+
+      return Ok(new ImageUploadResponseDto { Url = url });
     }
 
     [HttpPost]
@@ -543,6 +576,17 @@ namespace lmsPortalBe.Controllers
       }
 
       return contentType?.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static bool IsAllowedImageType(string? contentType, string fileName)
+    {
+      var extension = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
+      if (extension is "jpg" or "jpeg" or "png" or "webp" or "gif")
+      {
+        return true;
+      }
+
+      return contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
     }
   }
 }
