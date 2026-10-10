@@ -21,7 +21,8 @@ namespace lmsPortalBe.Controllers
       UserManager<ApplicationUser> _userManager,
       INotificationService _notifications,
       IRichTextSanitizer richTextSanitizer,
-      ICloudinaryAudioService cloudinaryAudio)
+      ICloudinaryAudioService cloudinaryAudio,
+      IVercelBlobService vercelBlob)
       : CoursePortalControllerBase(context, mapper)
   {
 
@@ -213,6 +214,38 @@ namespace lmsPortalBe.Controllers
       return Ok(new AudioUploadResponseDto { Url = url });
     }
 
+    [HttpPost("image")]
+    [Authorize(Roles = "teacher,admin")]
+    public async Task<IActionResult> UploadImage(IFormFile file)
+    {
+      if (file is null || file.Length == 0)
+      {
+        return BadRequest("No image file was provided.");
+      }
+
+      const long maxBytes = 1024 * 1024;
+      if (file.Length > maxBytes)
+      {
+        return BadRequest("Image must be 1 MB or smaller.");
+      }
+
+      if (!IsAllowedImageType(file.ContentType, file.FileName))
+      {
+        return BadRequest("Only image files are allowed (jpeg, png, webp, gif).");
+      }
+
+      using var memory = new MemoryStream();
+      await file.CopyToAsync(memory, HttpContext.RequestAborted);
+
+      var url = await vercelBlob.UploadAsync(
+          memory.ToArray(),
+          file.FileName,
+          file.ContentType ?? "image/webp",
+          HttpContext.RequestAborted);
+
+      return Ok(new ImageUploadResponseDto { Url = url });
+    }
+
     [HttpPost]
     [Authorize]
     public async Task<IActionResult> CreateResource(CreateResourceRequestDto dto)
@@ -284,6 +317,8 @@ namespace lmsPortalBe.Controllers
         AudioUrls = audioUrls,
         CreatorId = CurrentUserId,
         Url = dto.Url,
+        IsInteractiveImage = dto.IsInteractiveImage,
+        Points = dto.Points is null ? [] : _mapper.Map<List<ImagePoint>>(dto.Points),
         ActivityId = dto.ActivityId,
         CourseId = dto.CourseId,
         ModuleId = dto.ModuleId,
@@ -456,6 +491,14 @@ namespace lmsPortalBe.Controllers
 
       resource.Url = dto.Url ?? resource.Url;
       resource.DisplayName = dto.DisplayName ?? resource.DisplayName;
+      if (dto.IsInteractiveImage is not null)
+      {
+        resource.IsInteractiveImage = dto.IsInteractiveImage.Value;
+      }
+      if (dto.Points is not null)
+      {
+        resource.Points = _mapper.Map<List<ImagePoint>>(dto.Points);
+      }
       if (dto.Description is not null)
       {
         resource.Description = richTextSanitizer.Sanitize(dto.Description);
@@ -533,6 +576,17 @@ namespace lmsPortalBe.Controllers
       }
 
       return contentType?.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    private static bool IsAllowedImageType(string? contentType, string fileName)
+    {
+      var extension = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
+      if (extension is "jpg" or "jpeg" or "png" or "webp" or "gif")
+      {
+        return true;
+      }
+
+      return contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
     }
   }
 }

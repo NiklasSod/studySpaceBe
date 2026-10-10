@@ -32,6 +32,7 @@ namespace lmsPortalBe.MappingProfiles
                 .ForMember(dest => dest.LatestSubmissionStatus, opt => opt.Ignore())
                 .ForMember(dest => dest.LatestFeedback, opt => opt.Ignore());
             CreateMap<Resource, ResourceDto>();
+            CreateMap<ImagePoint, ImagePointDto>().ReverseMap();
             CreateMap<Submission, SubmissionDto>()
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()));
             CreateMap<UserNotification, NotificationDto>()

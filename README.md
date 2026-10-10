@@ -1,4 +1,4 @@
-# lmsPortalBe
+# studySpaceBe (lmsPortalBe)
 
 ASP.NET Core (net10.0) Web API backend for an LMS portal. SQLite via EF Core, JWT auth with HttpOnly refresh-token cookie.
 

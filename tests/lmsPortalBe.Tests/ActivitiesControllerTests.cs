@@ -253,6 +253,37 @@ public class ActivitiesControllerTests : ApiTestBase, IClassFixture<TestWebAppli
   }
 
   [Fact]
+  public async Task CreateActivity_AlwaysActive_IgnoresDatesAndUsesModuleWindow()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.create.alwaysactive@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+    var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId, Jan1, Jan31);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/activities",
+        teacher.AccessToken,
+        new CreateActivityRequestDto
+        {
+          ModuleId = moduleId,
+          Type = "Lecture",
+          Name = "Always on",
+          Description = "Spans the whole module",
+          IsAlwaysActive = true,
+          StartDate = Feb28,
+          EndDate = Jan1
+        });
+
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ActivityDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.True(body.IsAlwaysActive);
+    Assert.Equal(Jan1, body.StartDate);
+    Assert.Equal(Jan31, body.EndDate);
+  }
+
+  [Fact]
   public async Task DeleteActivity_AsCreator_ReturnsNoContent()
   {
     var teacher = await CreateTeacherAsync("course.teacher.delete@example.com");
@@ -411,6 +442,79 @@ public class ActivitiesControllerTests : ApiTestBase, IClassFixture<TestWebAppli
     var body = await response.Content.ReadFromJsonAsync<ActivityDto>(TestContext.Current.CancellationToken);
     Assert.NotNull(body);
     Assert.Equal(targetModuleId, body.ModuleId);
+  }
+
+  [Fact]
+  public async Task UpdateActivity_SetAlwaysActive_AnchorsDatesToModule()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.update.alwaysactive@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+    var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId, Jan1, Jan31);
+    var activityId = await CreateActivityAsync(teacher.AccessToken, moduleId, Jan1, Jan31);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/activities/{activityId}",
+        teacher.AccessToken,
+        new UpdateActivityRequestDto
+        {
+          IsAlwaysActive = true,
+          StartDate = Feb28,
+          EndDate = Jan1
+        });
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ActivityDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.True(body.IsAlwaysActive);
+    Assert.Equal(Jan1, body.StartDate);
+    Assert.Equal(Jan31, body.EndDate);
+  }
+
+  [Fact]
+  public async Task UpdateActivity_UnsetAlwaysActive_RestoresExplicitDates()
+  {
+    var teacher = await CreateTeacherAsync("course.teacher.update.unsetactive@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken, Jan1, Jan31);
+    var moduleId = await CreateModuleAsync(teacher.AccessToken, courseId, Jan1, Jan31);
+
+    var createResponse = await SendAuthorizedAsync(
+        HttpMethod.Post,
+        "/api/activities",
+        teacher.AccessToken,
+        new CreateActivityRequestDto
+        {
+          ModuleId = moduleId,
+          Type = "Lecture",
+          Name = "Always on",
+          Description = "Spans the whole module",
+          IsAlwaysActive = true
+        });
+
+    Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+    var created = await createResponse.Content.ReadFromJsonAsync<ActivityDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(created);
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/activities/{created.Id}",
+        teacher.AccessToken,
+        new UpdateActivityRequestDto
+        {
+          IsAlwaysActive = false,
+          StartDate = Jan15,
+          EndDate = Jan31
+        });
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ActivityDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.False(body.IsAlwaysActive);
+    Assert.Equal(Jan15, body.StartDate);
+    Assert.Equal(Jan31, body.EndDate);
   }
 
   [Fact]

@@ -95,7 +95,7 @@ namespace lmsPortalBe.Controllers
     public async Task<IActionResult> CreateActivity(CreateActivityRequestDto dto)
     {
 
-      if (dto.EndDate <= dto.StartDate)
+      if (!dto.IsAlwaysActive && dto.EndDate <= dto.StartDate)
       {
         return BadRequest("The activity seem to end before it starts, check the start and end dates.");
       }
@@ -111,8 +111,9 @@ namespace lmsPortalBe.Controllers
         return Forbid();
       }
 
-      if (dto.EndDate < module.StartDate || dto.EndDate > module.EndDate ||
-          dto.StartDate < module.StartDate || dto.StartDate > module.EndDate)
+      if (!dto.IsAlwaysActive &&
+          (dto.EndDate < module.StartDate || dto.EndDate > module.EndDate ||
+           dto.StartDate < module.StartDate || dto.StartDate > module.EndDate))
       {
         return BadRequest("The activity seem to extend outside the module's timeframe, check the start and end dates.");
       }
@@ -129,8 +130,8 @@ namespace lmsPortalBe.Controllers
         ActivityType = type,
         Description = richTextSanitizer.Sanitize(dto.Description),
         IsAlwaysActive = dto.IsAlwaysActive,
-        StartDate = dto.StartDate,
-        EndDate = dto.EndDate
+        StartDate = dto.IsAlwaysActive ? module.StartDate : dto.StartDate,
+        EndDate = dto.IsAlwaysActive ? module.EndDate : dto.EndDate
       };
 
       _context.Activities.Add(activity);
@@ -163,10 +164,12 @@ namespace lmsPortalBe.Controllers
         return NotFound();
       }
 
+      var isAlwaysActive = dto.IsAlwaysActive ?? activity.IsAlwaysActive;
+
       var startDate = dto.StartDate ?? activity.StartDate;
       var endDate = dto.EndDate ?? activity.EndDate;
 
-      if (endDate <= startDate)
+      if (!isAlwaysActive && endDate <= startDate)
       {
         return BadRequest("Activity can't end before it starts, check the start and end dates.");
       }
@@ -199,8 +202,9 @@ namespace lmsPortalBe.Controllers
         module = destinationModule;
       }
 
-      if (endDate < module.StartDate || endDate > module.EndDate ||
-          startDate < module.StartDate || startDate > module.EndDate)
+      if (!isAlwaysActive &&
+          (endDate < module.StartDate || endDate > module.EndDate ||
+           startDate < module.StartDate || startDate > module.EndDate))
       {
         return BadRequest("Activity can't extend outside the module's timeframe, check the start and end dates.");
       }
@@ -225,13 +229,18 @@ namespace lmsPortalBe.Controllers
         activity.Description = richTextSanitizer.Sanitize(dto.Description);
       }
 
-      if (dto.IsAlwaysActive is not null)
-      {
-        activity.IsAlwaysActive = dto.IsAlwaysActive.Value;
-      }
+      activity.IsAlwaysActive = isAlwaysActive;
 
-      activity.StartDate = startDate;
-      activity.EndDate = endDate;
+      if (isAlwaysActive)
+      {
+        activity.StartDate = module.StartDate;
+        activity.EndDate = module.EndDate;
+      }
+      else
+      {
+        activity.StartDate = startDate;
+        activity.EndDate = endDate;
+      }
 
       await _context.SaveChangesAsync();
 
