@@ -75,6 +75,20 @@ dotnet ef migrations add <Name> --project src/lmsPortalBe
 - Deleting a course, module or activity cascade-deletes its resources in the database but leaves
   their Cloudinary assets behind.
 
+## Per-user resource progress
+
+- Progress is stored per user-resource pair in `UserResourceProgress`; never store a user's status
+  on the shared `Resource` entity.
+- `GET /api/resources/mine` returns resources visible to the signed-in user with their own
+  `UserProgressStatus` (`Current`, `CheckLater`, `Done`, or `Archived`) and `IsFavorite`. A missing
+  user-resource row defaults to `Current` and not favorited.
+- Resource creation initializes the creator's progress to `Current`; existing resources are
+  initialized as `Current` for their creator by migration. Other viewers default to `Current`
+  until they update their own status.
+- `PATCH /api/resources/{id}/progress` updates only the signed-in user's progress. Favorite is
+  independent when status is `Current` or `Done`; changing status to `CheckLater` or `Archived`
+  always clears `IsFavorite`. `Favorite` is not a progress status.
+
 ## Deployment (Railway)
 
 - Production runs on Railway. The database is **SQLite stored on a Railway volume** — the same

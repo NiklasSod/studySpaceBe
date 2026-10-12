@@ -17,6 +17,7 @@ namespace lmsPortalBe.Data
         public DbSet<UserProfile> UserProfiles { get; set; } = null!;
         public DbSet<Submission> Submissions { get; set; } = null!;
         public DbSet<Resource> Resources { get; set; } = null!;
+        public DbSet<UserResourceProgress> UserResourceProgress { get; set; } = null!;
         public DbSet<Notification> Notifications { get; set; } = null!;
         public DbSet<UserNotification> UserNotifications { get; set; } = null!;
 
@@ -145,6 +146,30 @@ namespace lmsPortalBe.Data
                 entity.HasOne(e => e.Activity)
                     .WithMany(c => c.Resources)
                     .HasForeignKey(e => e.ActivityId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<UserResourceProgress>(entity =>
+            {
+                entity.ToTable("lmsUserResourceProgress", table =>
+                    table.HasCheckConstraint(
+                        "CK_lmsUserResourceProgress_UserProgressStatus",
+                        "\"UserProgressStatus\" IN ('Current', 'CheckLater', 'Done', 'Archived')"));
+
+                entity.HasKey(e => new { e.UserId, e.ResourceId });
+
+                entity.Property(e => e.UserProgressStatus)
+                    .HasConversion<string>()
+                    .HasDefaultValue(UserProgressStatus.Current);
+
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.ResourceProgress)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Resource)
+                    .WithMany(r => r.UserProgress)
+                    .HasForeignKey(e => e.ResourceId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
 

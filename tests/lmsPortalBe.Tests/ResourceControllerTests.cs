@@ -146,6 +146,8 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     Assert.NotEqual(0, body.Id);
     Assert.Equal("Slides", body.DisplayName);
     Assert.Equal(courseId, body.CourseId);
+    Assert.Equal("Current", body.UserProgressStatus);
+    Assert.False(body.IsFavorite);
   }
 
   [Fact]
@@ -980,6 +982,8 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     Assert.NotEqual(0, body.Id);
     Assert.Equal(moduleId, body.ModuleId);
     Assert.True(body.IsStudentSubmitted);
+    Assert.Equal("Current", body.UserProgressStatus);
+    Assert.False(body.IsFavorite);
   }
 
   [Fact]
@@ -1156,5 +1160,96 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
     var resources = await response.Content.ReadFromJsonAsync<List<ResourceDto>>(TestContext.Current.CancellationToken);
     Assert.NotNull(resources);
     Assert.DoesNotContain(resources, r => r.Id == submittedId);
+  }
+
+  [Fact]
+  public async Task UserResourceProgress_IsPrivateAndFavoriteClearsForCheckLater()
+  {
+    var teacher = await CreateTeacherAsync("resource.progress.teacher@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Progress resource",
+      Url = "https://example.com/progress.pdf",
+      CourseId = courseId
+    });
+
+    var student = await RegisterAsync("resource.progress.student@example.com");
+    await EnrollAsync(student.AccessToken, teacher.AccessToken, courseId, "resource.progress.student@example.com");
+    var otherStudent = await RegisterAsync("resource.progress.other@example.com");
+    await EnrollAsync(otherStudent.AccessToken, teacher.AccessToken, courseId, "resource.progress.other@example.com");
+
+    var initial = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        "/api/resources/mine",
+        student.AccessToken);
+    var initialResources = await initial.Content.ReadFromJsonAsync<List<ResourceDto>>(TestContext.Current.CancellationToken);
+    var initialResource = Assert.Single(initialResources!, r => r.Id == resourceId);
+    Assert.Equal("Current", initialResource.UserProgressStatus);
+    Assert.False(initialResource.IsFavorite);
+
+    var markDone = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}/progress",
+        student.AccessToken,
+        new UpdateUserResourceProgressRequestDto
+        {
+          UserProgressStatus = "Done",
+          IsFavorite = true
+        });
+    Assert.Equal(HttpStatusCode.OK, markDone.StatusCode);
+
+    var markedDone = await markDone.Content.ReadFromJsonAsync<UserResourceProgressDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(markedDone);
+    Assert.Equal("Done", markedDone.UserProgressStatus);
+    Assert.True(markedDone.IsFavorite);
+
+    var otherView = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        "/api/resources/mine",
+        otherStudent.AccessToken);
+    var otherResources = await otherView.Content.ReadFromJsonAsync<List<ResourceDto>>(TestContext.Current.CancellationToken);
+    var otherResource = Assert.Single(otherResources!, r => r.Id == resourceId);
+    Assert.Equal("Current", otherResource.UserProgressStatus);
+    Assert.False(otherResource.IsFavorite);
+
+    var moveToCheckLater = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}/progress",
+        student.AccessToken,
+        new UpdateUserResourceProgressRequestDto { UserProgressStatus = "CheckLater" });
+    var checkLater = await moveToCheckLater.Content.ReadFromJsonAsync<UserResourceProgressDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(checkLater);
+    Assert.Equal("CheckLater", checkLater.UserProgressStatus);
+    Assert.False(checkLater.IsFavorite);
+
+    var outsider = await RegisterAsync("resource.progress.outsider@example.com");
+    var forbidden = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}/progress",
+        outsider.AccessToken,
+        new UpdateUserResourceProgressRequestDto { UserProgressStatus = "Done" });
+    Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+  }
+
+  [Fact]
+  public async Task UpdateUserResourceProgress_RejectsUnknownStatus()
+  {
+    var teacher = await CreateTeacherAsync("resource.progress.invalid.teacher@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Invalid status resource",
+      Url = "https://example.com/invalid-status.pdf",
+      CourseId = courseId
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}/progress",
+        teacher.AccessToken,
+        new UpdateUserResourceProgressRequestDto { UserProgressStatus = "Favorite" });
+
+    Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
   }
 }

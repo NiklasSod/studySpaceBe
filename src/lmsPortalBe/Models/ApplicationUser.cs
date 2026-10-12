@@ -9,6 +9,7 @@ namespace lmsPortalBe.Models
         public ICollection<CourseEnrollment> Enrollments { get; set; } = [];
         public ICollection<Submission> Submissions { get; set; } = [];
         public ICollection<Resource> Resources { get; set; } = [];
+        public ICollection<UserResourceProgress> ResourceProgress { get; set; } = [];
         public UserProfile? Profile { get; set; }
     }
 }

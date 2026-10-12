@@ -11,6 +11,8 @@ namespace lmsPortalBe.DTOs.Resource
         public bool IsInteractiveImage { get; set; }
         public List<ImagePointDto> Points { get; set; } = [];
         public bool IsStudentSubmitted { get; set; }
+        public string UserProgressStatus { get; set; } = "Current";
+        public bool IsFavorite { get; set; }
         public DateTime LastEditDate { get; set; }
         public DateTime UploadDate { get; set; }
         public int? CourseId { get; set; }

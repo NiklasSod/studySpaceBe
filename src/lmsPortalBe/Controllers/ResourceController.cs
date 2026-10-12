@@ -40,7 +40,7 @@ namespace lmsPortalBe.Controllers
           .OrderBy(r => r.UploadDate)
           .ToListAsync();
 
-      return Ok(resources.Select(_mapper.Map<ResourceDto>));
+      return Ok(await MapResourcesWithUserProgressAsync(resources));
     }
 
     [HttpGet("mine")]
@@ -61,7 +61,7 @@ namespace lmsPortalBe.Controllers
           .OrderBy(r => r.UploadDate)
           .ToListAsync();
 
-      return Ok(resources.Select(_mapper.Map<ResourceDto>));
+      return Ok(await MapResourcesWithUserProgressAsync(resources));
     }
 
     [HttpGet("{id:int}")]
@@ -85,7 +85,7 @@ namespace lmsPortalBe.Controllers
         return Forbid();
       }
 
-      return Ok(_mapper.Map<ResourceDto>(resource));
+      return Ok(await MapResourceWithUserProgressAsync(resource));
     }
 
     [HttpGet("/api/courses/{courseId:int}/resources")]
@@ -107,7 +107,7 @@ namespace lmsPortalBe.Controllers
           .OrderBy(r => r.UploadDate)
           .ToListAsync();
 
-      return Ok(resources.Select(_mapper.Map<ResourceDto>));
+      return Ok(await MapResourcesWithUserProgressAsync(resources));
     }
 
     [HttpGet("/api/modules/{moduleId:int}/resources")]
@@ -129,7 +129,7 @@ namespace lmsPortalBe.Controllers
           .OrderBy(r => r.UploadDate)
           .ToListAsync();
 
-      return Ok(resources.Select(_mapper.Map<ResourceDto>));
+      return Ok(await MapResourcesWithUserProgressAsync(resources));
     }
 
     [HttpGet("/api/activity/{activityId:int}/resources")]
@@ -153,7 +153,7 @@ namespace lmsPortalBe.Controllers
           .OrderBy(r => r.UploadDate)
           .ToListAsync();
 
-      return Ok(resources.Select(_mapper.Map<ResourceDto>));
+      return Ok(await MapResourcesWithUserProgressAsync(resources));
     }
 
     [HttpGet("/api/modules/{moduleId:int}/student-resources")]
@@ -185,7 +185,7 @@ namespace lmsPortalBe.Controllers
           .ThenByDescending(r => r.Id)
           .ToListAsync();
 
-      return Ok(resources.Select(_mapper.Map<ResourceDto>));
+      return Ok(await MapResourcesWithUserProgressAsync(resources));
     }
 
     [HttpPost("audio")]
@@ -392,6 +392,12 @@ namespace lmsPortalBe.Controllers
         UploadDate = DateTime.UtcNow,
         LastEditDate = DateTime.UtcNow,
       };
+      var resourceProgress = new UserResourceProgress
+      {
+        UserId = CurrentUserId,
+        Resource = resource,
+        UserProgressStatus = UserProgressStatus.Current,
+      };
 
       if (isStudentOnly)
       {
@@ -407,6 +413,7 @@ namespace lmsPortalBe.Controllers
       }
 
       _context.Resources.Add(resource);
+      _context.UserResourceProgress.Add(resourceProgress);
       await _context.SaveChangesAsync();
 
       if (!isStudentOnly)
@@ -445,7 +452,93 @@ namespace lmsPortalBe.Controllers
         }
       }
 
-      return CreatedAtAction(nameof(GetResource), new { id = resource.Id }, _mapper.Map<ResourceDto>(resource));
+      return CreatedAtAction(
+          nameof(GetResource),
+          new { id = resource.Id },
+          await MapResourceWithUserProgressAsync(resource));
+    }
+
+    [HttpPatch("{id:int}/progress")]
+    [Authorize]
+    public async Task<IActionResult> UpdateUserResourceProgress(
+        int id,
+        UpdateUserResourceProgressRequestDto dto)
+    {
+      if (dto.UserProgressStatus is null && dto.IsFavorite is null)
+      {
+        return BadRequest("At least one progress field must be provided.");
+      }
+
+      var resource = await _context.Resources
+          .Include(r => r.Activity)
+              .ThenInclude(a => a!.Module)
+          .Include(r => r.Module)
+          .FirstOrDefaultAsync(r => r.Id == id);
+
+      if (resource is null)
+      {
+        return NotFound();
+      }
+
+      if (!User.IsInRole("admin")
+          && resource.CreatorId != CurrentUserId
+          && !await IsEnrolledAsync(GetResourceCourseId(resource)))
+      {
+        return Forbid();
+      }
+
+      UserProgressStatus? requestedStatus = null;
+      if (dto.UserProgressStatus is not null)
+      {
+        requestedStatus = dto.UserProgressStatus switch
+        {
+          nameof(UserProgressStatus.Current) => UserProgressStatus.Current,
+          nameof(UserProgressStatus.CheckLater) => UserProgressStatus.CheckLater,
+          nameof(UserProgressStatus.Done) => UserProgressStatus.Done,
+          nameof(UserProgressStatus.Archived) => UserProgressStatus.Archived,
+          _ => null
+        };
+
+        if (requestedStatus is null)
+        {
+          return BadRequest("UserProgressStatus must be Current, CheckLater, Done, or Archived.");
+        }
+      }
+
+      var progress = await _context.UserResourceProgress
+          .FirstOrDefaultAsync(p => p.UserId == CurrentUserId && p.ResourceId == resource.Id);
+      if (progress is null)
+      {
+        progress = new UserResourceProgress
+        {
+          UserId = CurrentUserId,
+          ResourceId = resource.Id
+        };
+        _context.UserResourceProgress.Add(progress);
+      }
+
+      if (requestedStatus is not null)
+      {
+        progress.UserProgressStatus = requestedStatus.Value;
+      }
+
+      if (progress.UserProgressStatus is UserProgressStatus.CheckLater or UserProgressStatus.Archived)
+      {
+        progress.IsFavorite = false;
+      }
+      else if (dto.IsFavorite is not null)
+      {
+        progress.IsFavorite = dto.IsFavorite.Value;
+      }
+
+      await _context.SaveChangesAsync();
+
+      return Ok(new UserResourceProgressDto
+      {
+        ResourceId = resource.Id,
+        UserProgressStatus = progress.UserProgressStatus.ToString(),
+        IsFavorite = progress.IsFavorite
+      });
     }
 
     [HttpPost("/api/activity/{activityId:int}/resources")]
@@ -585,7 +678,7 @@ namespace lmsPortalBe.Controllers
 
       await DestroyRemovedAudioAsync(previousAudioUrls, CollectAudioUrls(resource));
 
-      return Ok(_mapper.Map<ResourceDto>(resource));
+      return Ok(await MapResourceWithUserProgressAsync(resource));
     }
 
 
@@ -624,6 +717,30 @@ namespace lmsPortalBe.Controllers
       [.. resource.AudioUrls, .. resource.Points
           .Select(p => p.AudioUrl)
           .Where(url => !string.IsNullOrWhiteSpace(url))];
+
+    private async Task<ResourceDto> MapResourceWithUserProgressAsync(Resource resource) =>
+        (await MapResourcesWithUserProgressAsync([resource]))[0];
+
+    private async Task<List<ResourceDto>> MapResourcesWithUserProgressAsync(
+        IReadOnlyCollection<Resource> resources)
+    {
+      var resourceIds = resources.Select(r => r.Id).ToArray();
+      var progressByResourceId = await _context.UserResourceProgress
+          .Where(p => p.UserId == CurrentUserId && resourceIds.Contains(p.ResourceId))
+          .ToDictionaryAsync(p => p.ResourceId);
+
+      return resources.Select(resource =>
+      {
+        var dto = _mapper.Map<ResourceDto>(resource);
+        if (progressByResourceId.TryGetValue(resource.Id, out var progress))
+        {
+          dto.UserProgressStatus = progress.UserProgressStatus.ToString();
+          dto.IsFavorite = progress.IsFavorite;
+        }
+
+        return dto;
+      }).ToList();
+    }
 
     /// <summary>
     /// Deletes the Cloudinary assets that <paramref name="previousUrls"/> held but
