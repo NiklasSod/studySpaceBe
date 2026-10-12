@@ -42,6 +42,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     Environment.SetEnvironmentVariable("ADMIN_USERNAME", "admin");
     Environment.SetEnvironmentVariable("ADMIN_EMAIL", "admin@example.com");
     Environment.SetEnvironmentVariable("ADMIN_PASSWORD", "AdminPass1");
+
+    // Not a secret: naming the cloud lets CloudinaryAudioService recognise the
+    // audio URLs the tests use as belonging to this account.
+    Environment.SetEnvironmentVariable("CLOUDINARY_CLOUD_NAME", "demo");
   }
 
   protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -72,6 +76,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
       services.RemoveAll<IEmailSender>();
       services.AddSingleton<IEmailSender>(EmailSender);
+
+      // Wrap the real audio service (which owns the URL parsing) so tests can see
+      // which recordings the API asks Cloudinary to delete.
+      services.RemoveAll<ICloudinaryAudioService>();
+      services.AddSingleton<CloudinaryAudioService>();
+      services.AddSingleton<ICloudinaryAudioService>(sp =>
+          new RecordingCloudinaryAudioService(sp.GetRequiredService<CloudinaryAudioService>()));
     });
   }
 

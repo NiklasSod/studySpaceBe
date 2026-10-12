@@ -57,6 +57,24 @@ dotnet ef migrations add <Name> --project src/lmsPortalBe
 - `RESEND_API_KEY` + `EMAIL_FROM` (password-reset email), optional `PASSWORD_RESET_PAGE_URL`
 - `BLOB_READ_WRITE_TOKEN` (Vercel Blob), `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET`
 
+## Recordings (voice notes + hotspot audio)
+
+- Recordings are uploaded to Cloudinary (`voice-notes/`, raw resource type) with
+  `POST /api/resources/audio`, which returns the URL the client attaches to a resource:
+  `AudioUrls` (list) or `Points[].AudioUrl` (interactive-image hotspot) on create or
+  `PATCH /api/resources/{id}`.
+- Those two lists are the single source of truth for a recording's lifetime. Dropping a URL from
+  either list on `PATCH` destroys the Cloudinary asset behind it, and `DELETE /api/resources/{id}`
+  destroys every asset the resource owns. Uploading always creates a new asset, so replacing a
+  recording means uploading the new take and swapping the URL in the list — the replaced asset is
+  deleted as part of the same update.
+- `DELETE /api/resources/{id}/audio?url=...` removes one recording (from either place) and destroys
+  its asset in one call, for UIs that delete without saving the rest of the resource.
+- Cloudinary deletes are best effort: they are skipped when the URL does not belong to the
+  configured account, and a failed delete is logged instead of failing the request.
+- Deleting a course, module or activity cascade-deletes its resources in the database but leaves
+  their Cloudinary assets behind.
+
 ## Deployment (Railway)
 
 - Production runs on Railway. The database is **SQLite stored on a Railway volume** — the same

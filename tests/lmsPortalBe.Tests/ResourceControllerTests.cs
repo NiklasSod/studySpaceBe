@@ -4,6 +4,8 @@ using lmsPortalBe.DTOs.Admin;
 using lmsPortalBe.DTOs.Auth;
 using lmsPortalBe.DTOs.Course;
 using lmsPortalBe.DTOs.Resource;
+using lmsPortalBe.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace lmsPortalBe.Tests;
 
@@ -12,6 +14,9 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
   public ResourceControllerTests(TestWebApplicationFactory factory) : base(factory)
   {
   }
+
+  private RecordingCloudinaryAudioService CloudinaryAudio =>
+      (RecordingCloudinaryAudioService)Factory.Services.GetRequiredService<ICloudinaryAudioService>();
 
   private static readonly DateTime Jan1 = new(2026, 1, 1);
   private static readonly DateTime Jan31 = new(2026, 1, 31);
@@ -514,6 +519,199 @@ public class ResourceControllerTests : ApiTestBase, IClassFixture<TestWebApplica
 
     Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
   }
+
+  [Fact]
+  public async Task UpdateResource_ReplacingOneOfManyRecordings_DeletesOnlyTheReplacedRecording()
+  {
+    var teacher = await CreateTeacherAsync("resource.audio.replace.one@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var recordings = Enumerable.Range(1, 5)
+        .Select(i => $"https://res.cloudinary.com/demo/raw/upload/v17000200{i}/voice-notes/replace-one-take-{i}.mp3")
+        .ToList();
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Five takes",
+      Url = "https://example.com/notes.pdf",
+      CourseId = courseId,
+      AudioUrls = recordings
+    });
+
+    // The client re-sends the whole list with only the third recording swapped
+    // for the freshly uploaded take.
+    var reRecorded = "https://res.cloudinary.com/demo/raw/upload/v17000299/voice-notes/replace-one-take-3-redo.mp3";
+    var updated = recordings.ToList();
+    updated[2] = reRecorded;
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Patch,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken,
+        new UpdateResourceRequestDto { AudioUrls = updated });
+
+    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+    var body = await response.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Equal(updated, body.AudioUrls);
+
+    // Only the replaced take is destroyed; the other four are left untouched.
+    Assert.Equal(["voice-notes/replace-one-take-3.mp3"], DeletedRecordings("voice-notes/replace-one-"));
+  }
+
+  [Fact]
+  public async Task DeleteResourceAudio_RemovesRecordingFromAudioList()
+  {
+    var teacher = await CreateTeacherAsync("resource.audio.delete@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var keptUrl = "https://res.cloudinary.com/demo/raw/upload/v1700000000/voice-notes/audio-list-kept.mp3";
+    var removedUrl = "https://res.cloudinary.com/demo/raw/upload/v1700000001/voice-notes/audio-list-removed.mp3";
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Voice notes",
+      Url = "https://example.com/notes.pdf",
+      CourseId = courseId,
+      AudioUrls = [keptUrl, removedUrl]
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Delete,
+        $"/api/resources/{resourceId}/audio?url={Uri.EscapeDataString(removedUrl)}",
+        teacher.AccessToken);
+
+    Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+    var get = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken);
+    var body = await get.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Equal(keptUrl, Assert.Single(body.AudioUrls));
+
+    Assert.Equal(["voice-notes/audio-list-removed.mp3"], DeletedRecordings("voice-notes/audio-list-"));
+  }
+
+  [Fact]
+  public async Task DeleteResourceAudio_RemovesRecordingFromImagePoint()
+  {
+    var teacher = await CreateTeacherAsync("resource.audio.point.delete@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var keptUrl = "https://res.cloudinary.com/demo/raw/upload/v1700000002/voice-notes/point-audio-kept.mp3";
+    var removedUrl = "https://res.cloudinary.com/demo/raw/upload/v1700000003/voice-notes/point-audio-removed.mp3";
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Anatomy",
+      Url = "https://example.com/anatomy.png",
+      CourseId = courseId,
+      IsInteractiveImage = true,
+      Points =
+      [
+        new ImagePointDto { X = 0.25, Y = 0.5, Text = "Heart", AudioUrl = removedUrl },
+        new ImagePointDto { X = 0.75, Y = 0.2, Text = "Lung", AudioUrl = keptUrl }
+      ]
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Delete,
+        $"/api/resources/{resourceId}/audio?url={Uri.EscapeDataString(removedUrl)}",
+        teacher.AccessToken);
+
+    Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+    var get = await SendAuthorizedAsync(
+        HttpMethod.Get,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken);
+    var body = await get.Content.ReadFromJsonAsync<ResourceDto>(TestContext.Current.CancellationToken);
+    Assert.NotNull(body);
+    Assert.Equal(2, body.Points.Count);
+    Assert.Equal(string.Empty, body.Points[0].AudioUrl);
+    Assert.Equal("Heart", body.Points[0].Text);
+    Assert.Equal(keptUrl, body.Points[1].AudioUrl);
+
+    Assert.Equal(["voice-notes/point-audio-removed.mp3"], DeletedRecordings("voice-notes/point-audio-"));
+  }
+
+  [Fact]
+  public async Task DeleteResourceAudio_WithRecordingNotOnResource_ReturnsNotFoundAndDeletesNothing()
+  {
+    var teacher = await CreateTeacherAsync("resource.audio.unrelated@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Slides",
+      Url = "https://example.com/slides.pdf",
+      CourseId = courseId,
+      AudioUrls = ["https://res.cloudinary.com/demo/raw/upload/v1700000004/voice-notes/unrelated-slides.mp3"]
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Delete,
+        $"/api/resources/{resourceId}/audio?url={Uri.EscapeDataString("https://res.cloudinary.com/demo/raw/upload/v1700000005/voice-notes/unrelated-other.mp3")}",
+        teacher.AccessToken);
+
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    Assert.Empty(DeletedRecordings("voice-notes/unrelated-"));
+  }
+
+  [Fact]
+  public async Task DeleteResourceAudio_AsStudent_ReturnsForbiddenAndDeletesNothing()
+  {
+    var teacher = await CreateTeacherAsync("resource.audio.delete.student@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var audioUrl = "https://res.cloudinary.com/demo/raw/upload/v1700000006/voice-notes/student-guard.mp3";
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Voice notes",
+      Url = "https://example.com/notes.pdf",
+      CourseId = courseId,
+      AudioUrls = [audioUrl]
+    });
+
+    var student = await RegisterAsync("resource.audio.delete.forbidden@example.com");
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Delete,
+        $"/api/resources/{resourceId}/audio?url={Uri.EscapeDataString(audioUrl)}",
+        student.AccessToken);
+
+    Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    Assert.Empty(DeletedRecordings("voice-notes/student-guard"));
+  }
+
+  [Fact]
+  public async Task DeleteResource_DeletesEveryRecordingItOwns()
+  {
+    var teacher = await CreateTeacherAsync("resource.audio.delete.resource@example.com");
+    var courseId = await CreateCourseAsync(teacher.AccessToken);
+    var firstUrl = "https://res.cloudinary.com/demo/raw/upload/v1700000007/voice-notes/resource-delete-1.mp3";
+    var secondUrl = "https://res.cloudinary.com/demo/raw/upload/v1700000008/voice-notes/resource-delete-2.mp3";
+    var resourceId = await CreateResourceAsync(teacher.AccessToken, new CreateResourceRequestDto
+    {
+      DisplayName = "Voice notes",
+      Url = "https://example.com/notes.pdf",
+      CourseId = courseId,
+      AudioUrls = [firstUrl, secondUrl]
+    });
+
+    var response = await SendAuthorizedAsync(
+        HttpMethod.Delete,
+        $"/api/resources/{resourceId}",
+        teacher.AccessToken);
+
+    Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+    var deleted = DeletedRecordings("voice-notes/resource-delete-");
+    deleted.Sort(StringComparer.Ordinal);
+    Assert.Equal(["voice-notes/resource-delete-1.mp3", "voice-notes/resource-delete-2.mp3"], deleted);
+  }
+
+  /// <summary>
+  /// The audio assets the API asked Cloudinary to delete for one test, matched by
+  /// the public IDs that test uploaded so other tests in the class cannot leak in.
+  /// </summary>
+  private List<string> DeletedRecordings(string publicIdPrefix) =>
+      [.. CloudinaryAudio.DeletedPublicIds.Where(id => id.StartsWith(publicIdPrefix, StringComparison.Ordinal))];
+
 
   [Fact]
   public async Task GetCourseResources_AsAdmin_ReturnsResources()

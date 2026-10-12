@@ -214,6 +214,69 @@ namespace lmsPortalBe.Controllers
       return Ok(new AudioUploadResponseDto { Url = url });
     }
 
+    /// <summary>
+    /// Removes a single recording from a resource — either from its audio list or
+    /// from an interactive image point — and deletes the Cloudinary asset behind
+    /// it.
+    /// </summary>
+    [HttpDelete("{id:int}/audio")]
+    [Authorize(Roles = "teacher,admin")]
+    public async Task<IActionResult> DeleteResourceAudio(int id, [FromQuery] string? url)
+    {
+      var resource = await _context.Resources.FirstOrDefaultAsync(r => r.Id == id);
+      if (resource is null)
+      {
+        return NotFound();
+      }
+
+      if (!User.IsInRole("admin")
+          && resource.CreatorId != CurrentUserId)
+      {
+        return Forbid();
+      }
+
+      if (string.IsNullOrWhiteSpace(url) || !TryNormalizeAudioUrls([url], out var normalized))
+      {
+        return BadRequest("url must be a secure Cloudinary URL (https://res.cloudinary.com/...).");
+      }
+
+      var removedUrl = normalized[0];
+
+      var audioUrls = resource.AudioUrls.ToList();
+      var removedFromList = audioUrls.Remove(removedUrl);
+      if (removedFromList)
+      {
+        resource.AudioUrls = audioUrls;
+      }
+
+      var removedFromPoint = resource.Points
+          .Any(p => string.Equals(p.AudioUrl, removedUrl, StringComparison.Ordinal));
+      if (removedFromPoint)
+      {
+        resource.Points = resource.Points
+            .Select(p => string.Equals(p.AudioUrl, removedUrl, StringComparison.Ordinal)
+                ? new ImagePoint { X = p.X, Y = p.Y, Text = p.Text }
+                : p)
+            .ToList();
+      }
+
+      if (!removedFromList && !removedFromPoint)
+      {
+        return NotFound("The resource does not contain that recording.");
+      }
+
+      resource.LastEditDate = DateTime.UtcNow;
+      await _context.SaveChangesAsync();
+
+      var publicId = cloudinaryAudio.GetPublicId(removedUrl);
+      if (publicId is not null)
+      {
+        await cloudinaryAudio.DeleteAsync(publicId);
+      }
+
+      return NoContent();
+    }
+
     [HttpPost("image")]
     [Authorize(Roles = "teacher,admin")]
     public async Task<IActionResult> UploadImage(IFormFile file)
@@ -489,6 +552,10 @@ namespace lmsPortalBe.Controllers
         }
       }
 
+      // Captured before the incoming values are applied so the recordings the
+      // update drops can be deleted from Cloudinary afterwards.
+      var previousAudioUrls = CollectAudioUrls(resource);
+
       resource.Url = dto.Url ?? resource.Url;
       resource.DisplayName = dto.DisplayName ?? resource.DisplayName;
       if (dto.IsInteractiveImage is not null)
@@ -516,6 +583,8 @@ namespace lmsPortalBe.Controllers
 
       await _context.SaveChangesAsync();
 
+      await DestroyRemovedAudioAsync(previousAudioUrls, CollectAudioUrls(resource));
+
       return Ok(_mapper.Map<ResourceDto>(resource));
     }
 
@@ -537,10 +606,50 @@ namespace lmsPortalBe.Controllers
         return Forbid();
       }
 
+      var audioUrls = CollectAudioUrls(resource);
+
       _context.Resources.Remove(resource);
       await _context.SaveChangesAsync();
 
+      await DestroyRemovedAudioAsync(audioUrls, []);
+
       return NoContent();
+    }
+
+    /// <summary>
+    /// Every recording a resource owns: its audio list plus the audio attached to
+    /// the hotspots of an interactive image.
+    /// </summary>
+    private static List<string> CollectAudioUrls(Resource resource) =>
+      [.. resource.AudioUrls, .. resource.Points
+          .Select(p => p.AudioUrl)
+          .Where(url => !string.IsNullOrWhiteSpace(url))];
+
+    /// <summary>
+    /// Deletes the Cloudinary assets that <paramref name="previousUrls"/> held but
+    /// <paramref name="currentUrls"/> no longer does. Called after the database has
+    /// been saved so a failed save can never leave a resource pointing at a
+    /// deleted recording.
+    /// </summary>
+    private async Task DestroyRemovedAudioAsync(
+        IReadOnlyCollection<string> previousUrls,
+        IEnumerable<string> currentUrls)
+    {
+      var kept = currentUrls
+          .Select(cloudinaryAudio.GetPublicId)
+          .OfType<string>()
+          .ToHashSet(StringComparer.Ordinal);
+
+      var removed = previousUrls
+          .Select(cloudinaryAudio.GetPublicId)
+          .OfType<string>()
+          .Where(publicId => !kept.Contains(publicId))
+          .Distinct(StringComparer.Ordinal);
+
+      foreach (var publicId in removed)
+      {
+        await cloudinaryAudio.DeleteAsync(publicId);
+      }
     }
 
     private static bool TryNormalizeAudioUrls(List<string>? urls, out List<string> normalized)
