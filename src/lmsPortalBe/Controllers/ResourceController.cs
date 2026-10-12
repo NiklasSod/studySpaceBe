@@ -316,7 +316,7 @@ namespace lmsPortalBe.Controllers
         Description = richTextSanitizer.Sanitize(dto.Description),
         AudioUrls = audioUrls,
         CreatorId = CurrentUserId,
-        Url = dto.Url,
+        Url = dto.Url ?? string.Empty,
         IsInteractiveImage = dto.IsInteractiveImage,
         Points = dto.Points is null ? [] : _mapper.Map<List<ImagePoint>>(dto.Points),
         ActivityId = dto.ActivityId,
