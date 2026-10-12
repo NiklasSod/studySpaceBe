@@ -611,6 +611,33 @@ namespace lmsPortalBe.Migrations
                     b.ToTable("lmsUserProfile", (string)null);
                 });
 
+            modelBuilder.Entity("lmsPortalBe.Models.UserResourceProgress", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ResourceId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsFavorite")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserProgressStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Current");
+
+                    b.HasKey("UserId", "ResourceId");
+
+                    b.HasIndex("ResourceId");
+
+                    b.ToTable("lmsUserResourceProgress", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_lmsUserResourceProgress_UserProgressStatus", "\"UserProgressStatus\" IN ('Current', 'CheckLater', 'Done', 'Archived')");
+                        });
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -815,6 +842,25 @@ namespace lmsPortalBe.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("lmsPortalBe.Models.UserResourceProgress", b =>
+                {
+                    b.HasOne("lmsPortalBe.Models.Resource", "Resource")
+                        .WithMany("UserProgress")
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("lmsPortalBe.Models.ApplicationUser", "User")
+                        .WithMany("ResourceProgress")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Resource");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("lmsPortalBe.Models.Activity", b =>
                 {
                     b.Navigation("Resources");
@@ -825,6 +871,8 @@ namespace lmsPortalBe.Migrations
                     b.Navigation("Enrollments");
 
                     b.Navigation("Profile");
+
+                    b.Navigation("ResourceProgress");
 
                     b.Navigation("Resources");
 
@@ -857,6 +905,11 @@ namespace lmsPortalBe.Migrations
             modelBuilder.Entity("lmsPortalBe.Models.Notification", b =>
                 {
                     b.Navigation("Recipients");
+                });
+
+            modelBuilder.Entity("lmsPortalBe.Models.Resource", b =>
+                {
+                    b.Navigation("UserProgress");
                 });
 #pragma warning restore 612, 618
         }

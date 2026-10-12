@@ -6,6 +6,7 @@ namespace lmsPortalBe.Models
         public int Id { get; init; } = 0;
         public string CreatorId { get; set; } = string.Empty;
         public ApplicationUser Creator { get; set; } = null!;
+        public ICollection<UserResourceProgress> UserProgress { get; set; } = [];
         public string DisplayName { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public List<string> AudioUrls { get; set; } = [];
