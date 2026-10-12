@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace lmsPortalBe.Tests;
 
@@ -17,6 +18,12 @@ namespace lmsPortalBe.Tests;
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
   private readonly SqliteConnection _connection;
+
+  /// <summary>
+  /// Captures the emails the API would send so tests can assert on reset links
+  /// instead of contacting a real mail provider.
+  /// </summary>
+  public RecordingEmailSender EmailSender { get; } = new();
 
   public TestWebApplicationFactory()
   {
@@ -62,6 +69,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
       services.AddSingleton<DbConnection>(_ => _connection);
       services.AddDbContext<LmsPortalContext>((_, options) => options.UseSqlite(_connection));
+
+      services.RemoveAll<IEmailSender>();
+      services.AddSingleton<IEmailSender>(EmailSender);
     });
   }
 

@@ -8,8 +8,7 @@ namespace lmsPortalBe.DTOs.Resource
         public string DisplayName { get; set; } = string.Empty;
         public string? Description { get; set; }
         public List<string>? AudioUrls { get; set; }
-        [Required]
-        public string Url { get; set; } = string.Empty;
+        public string? Url { get; set; }
         public bool IsInteractiveImage { get; set; }
         public List<ImagePointDto>? Points { get; set; }
         public int? CourseId { get; set; }
