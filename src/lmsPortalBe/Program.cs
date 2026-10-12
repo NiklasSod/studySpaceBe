@@ -1,4 +1,6 @@
 using System.Text;
+using System.Threading.RateLimiting;
+using lmsPortalBe.Controllers;
 using lmsPortalBe.Data;
 using lmsPortalBe.MappingProfiles;
 using lmsPortalBe.Models;
@@ -6,6 +8,7 @@ using lmsPortalBe.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -96,9 +99,9 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddAutoMapper(cfg => { }, typeof(AutoMapperProfile));
-
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IEmailSender, ResendEmailSender>();
 builder.Services.AddSingleton<IRichTextSanitizer, RichTextSanitizer>();
 builder.Services.AddSingleton<ICloudinaryAudioService, CloudinaryAudioService>();
 builder.Services.AddSingleton<IVercelBlobService, VercelBlobService>();
@@ -106,6 +109,22 @@ builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+
+// The password-reset request endpoint sends email to an address supplied by the
+// caller, so cap how often a single client can trigger it.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(AuthController.PasswordResetRateLimitPolicy, context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(10),
+                QueueLimit = 0
+            }));
+});
 
 var app = builder.Build();
 
@@ -130,6 +149,7 @@ if (app.Environment.IsDevelopment())
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -111,7 +111,7 @@ public class TokenService : ITokenService
         // signal of theft, so revoke every active token for that user.
         if (storedToken.IsRevoked)
         {
-            await RevokeAllForUserAsync(storedToken.UserId);
+            await RevokeAllRefreshTokensForUserAsync(storedToken.UserId);
             throw new UnauthorizedAccessException("Invalid or expired refresh token.");
         }
 
@@ -142,7 +142,7 @@ public class TokenService : ITokenService
         }
     }
 
-    private async Task RevokeAllForUserAsync(string userId)
+    public async Task RevokeAllRefreshTokensForUserAsync(string userId)
     {
         await _context.RefreshTokens
             .Where(t => t.UserId == userId && !t.IsRevoked)
