@@ -37,6 +37,17 @@ namespace lmsPortalBe.Controllers
     [HttpGet("{userId}")]
     public async Task<IActionResult> GetProfile(string userId)
     {
+      var isSelf = string.Equals(CurrentUserId, userId, StringComparison.Ordinal);
+      var isFriend = !isSelf && await _context.FriendRequests.AnyAsync(r =>
+          r.Status == FriendRequestStatus.Accepted
+          && ((r.SenderUserId == CurrentUserId && r.RecipientUserId == userId)
+              || (r.SenderUserId == userId && r.RecipientUserId == CurrentUserId)));
+
+      if (!isSelf && !isFriend)
+      {
+        return NotFound("Profile not found.");
+      }
+
       var profile = await _context.UserProfiles
           .FirstOrDefaultAsync(p => p.UserId == userId);
 
