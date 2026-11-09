@@ -2,6 +2,7 @@ using System.Security.Claims;
 using lmsPortalBe.Data;
 using lmsPortalBe.DTOs.User;
 using lmsPortalBe.Models;
+using lmsPortalBe.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -22,16 +23,48 @@ namespace lmsPortalBe.Controllers
     [HttpGet]
     public async Task<IActionResult> GetUsers()
     {
-      var users = await _userManager.Users
+      var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+          ?? throw new UnauthorizedAccessException("User identity not found.");
+      var isAdmin = User.IsInRole("admin");
+
+      var usersQuery = _userManager.Users.AsQueryable();
+      if (!isAdmin)
+      {
+        var courseIds = await _context.CourseEnrollments
+            .Where(e => e.UserId == currentUserId
+                && e.Status == CourseEnrollmentStatus.Approved)
+            .Select(e => e.CourseId)
+            .ToListAsync();
+
+        var memberIds = await _context.CourseEnrollments
+            .Where(e => courseIds.Contains(e.CourseId)
+                && e.Status == CourseEnrollmentStatus.Approved
+                && e.UserId != currentUserId)
+            .Select(e => e.UserId)
+            .Distinct()
+            .ToListAsync();
+        usersQuery = usersQuery.Where(u => memberIds.Contains(u.Id));
+      }
+
+      var users = await usersQuery
           .OrderBy(u => u.LastName)
           .ThenBy(u => u.FirstName)
           .ToListAsync();
+
+      var userIds = users.Select(u => u.Id).ToList();
+      var friendIds = await _context.FriendRequests
+          .Where(r => r.Status == FriendRequestStatus.Accepted
+              && (r.SenderUserId == currentUserId || r.RecipientUserId == currentUserId))
+          .Select(r => r.SenderUserId == currentUserId ? r.RecipientUserId : r.SenderUserId)
+          .Where(id => userIds.Contains(id))
+          .ToHashSetAsync();
 
       var result = new List<UserDto>(users.Count);
       foreach (var user in users)
       {
         var roles = await _userManager.GetRolesAsync(user);
-        result.Add(ToDto(user, roles));
+        var isFriend = friendIds.Contains(user.Id);
+        result.Add(ToDto(user, roles, isFriend, maskEmail: !isAdmin && !isFriend));
       }
 
       return Ok(result);
@@ -83,8 +116,30 @@ namespace lmsPortalBe.Controllers
         return NotFound("User not found.");
       }
 
+      var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+          ?? throw new UnauthorizedAccessException("User identity not found.");
+      var isFriend = await _context.FriendRequests.AnyAsync(r =>
+          r.Status == FriendRequestStatus.Accepted
+          && ((r.SenderUserId == currentUserId && r.RecipientUserId == id)
+              || (r.SenderUserId == id && r.RecipientUserId == currentUserId)));
+
+      var sharesCourse = id == currentUserId || await _context.CourseEnrollments
+          .Where(e => e.UserId == currentUserId
+              && e.Status == CourseEnrollmentStatus.Approved)
+          .Select(e => e.CourseId)
+          .AnyAsync(courseId => _context.CourseEnrollments.Any(other =>
+              other.UserId == id
+              && other.CourseId == courseId
+              && other.Status == CourseEnrollmentStatus.Approved));
+
+      var isAdmin = User.IsInRole("admin");
+      if (!isAdmin && !isFriend && !sharesCourse)
+      {
+        return NotFound("User not found.");
+      }
+
       var roles = await _userManager.GetRolesAsync(user);
-      return Ok(ToDto(user, roles));
+      return Ok(ToDto(user, roles, isFriend, maskEmail: !isAdmin && !isFriend && id != currentUserId));
     }
 
     [HttpPut("{id}")]
@@ -139,13 +194,18 @@ namespace lmsPortalBe.Controllers
       return NoContent();
     }
 
-    private static UserDto ToDto(ApplicationUser user, IList<string> roles) => new()
+    private static UserDto ToDto(
+        ApplicationUser user,
+        IList<string> roles,
+        bool isFriend = false,
+        bool maskEmail = false) => new()
     {
       Id = user.Id,
       FirstName = user.FirstName,
       LastName = user.LastName,
-      Email = user.Email ?? string.Empty,
-      Role = roles.FirstOrDefault() ?? string.Empty
+      Email = maskEmail ? EmailMasker.Mask(user.Email ?? string.Empty) : user.Email ?? string.Empty,
+      Role = roles.FirstOrDefault() ?? string.Empty,
+      IsFriend = isFriend
     };
   }
 }
