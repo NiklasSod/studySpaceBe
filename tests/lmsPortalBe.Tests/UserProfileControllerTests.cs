@@ -129,7 +129,7 @@ public class UserProfileControllerTests : ApiTestBase, IClassFixture<TestWebAppl
   }
 
   [Fact]
-  public async Task GetProfile_OtherUser_ReturnsProfile()
+  public async Task GetProfile_OtherUserWhoIsNotAFriend_ReturnsNotFound()
   {
     var owner = await RegisterAsync("profile.owner@example.com");
     var viewer = await RegisterAsync("profile.viewer@example.com");
@@ -147,11 +147,7 @@ public class UserProfileControllerTests : ApiTestBase, IClassFixture<TestWebAppl
         $"/api/profiles/{ownerId}",
         viewer.AccessToken);
 
-    Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-    var profile = await response.Content.ReadFromJsonAsync<UserProfileDto>(TestContext.Current.CancellationToken);
-    Assert.NotNull(profile);
-    Assert.Equal("Visible to others", profile.AboutMe);
+    Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
   }
 
   [Fact]

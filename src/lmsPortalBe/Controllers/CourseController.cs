@@ -81,6 +81,28 @@ namespace lmsPortalBe.Controllers
       {
         dto.Enrollments.Clear();
       }
+      else
+      {
+        var currentUserId = CurrentUserId;
+        var memberIds = dto.Enrollments.Select(e => e.UserId).ToList();
+        var friendIds = await _context.FriendRequests
+            .Where(r => r.Status == FriendRequestStatus.Accepted
+                && (r.SenderUserId == currentUserId || r.RecipientUserId == currentUserId))
+            .Select(r => r.SenderUserId == currentUserId ? r.RecipientUserId : r.SenderUserId)
+            .Where(userId => memberIds.Contains(userId))
+            .ToHashSetAsync();
+
+        foreach (var enrollment in dto.Enrollments)
+        {
+          enrollment.IsFriend = friendIds.Contains(enrollment.UserId);
+          if (!User.IsInRole("admin")
+              && enrollment.UserId != currentUserId
+              && !enrollment.IsFriend)
+          {
+            enrollment.Email = EmailMasker.Mask(enrollment.Email);
+          }
+        }
+      }
 
       return Ok(dto);
     }

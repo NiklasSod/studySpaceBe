@@ -14,6 +14,7 @@ namespace lmsPortalBe.Data
         DbSet<Assignment> Assignments { get; set; }
         DbSet<Submission> Submissions { get; set; }
         DbSet<UserProfile> UserProfiles { get; set; }
+        DbSet<FriendRequest> FriendRequests { get; set; }
         DbSet<Resource> Resources { get; set; }
         DbSet<UserResourceProgress> UserResourceProgress { get; set; }
         DbSet<Notification> Notifications { get; set; }

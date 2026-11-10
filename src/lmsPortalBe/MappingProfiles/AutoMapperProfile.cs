@@ -21,7 +21,8 @@ namespace lmsPortalBe.MappingProfiles
                 .ForMember(dest => dest.FirstName, opt => opt.MapFrom(src => src.User.FirstName))
                 .ForMember(dest => dest.LastName, opt => opt.MapFrom(src => src.User.LastName))
                 .ForMember(dest => dest.Email, opt => opt.MapFrom(src => src.User.Email))
-                .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()));
+                .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status.ToString()))
+                .ForMember(dest => dest.IsFriend, opt => opt.Ignore());
 
             CreateMap<Activity, ActivityDto>()
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.ActivityType.ToString()));
