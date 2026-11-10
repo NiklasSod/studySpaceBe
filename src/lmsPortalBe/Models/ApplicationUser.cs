@@ -11,5 +11,7 @@ namespace lmsPortalBe.Models
         public ICollection<Resource> Resources { get; set; } = [];
         public ICollection<UserResourceProgress> ResourceProgress { get; set; } = [];
         public UserProfile? Profile { get; set; }
+        public ICollection<FriendRequest> SentFriendRequests { get; set; } = [];
+        public ICollection<FriendRequest> ReceivedFriendRequests { get; set; } = [];
     }
 }

@@ -1,1 +1,41 @@
 @lmsPortalBe_HostAddress = http://localhost:5250
+@accessToken = replace-with-access-token
+@memberUserId = replace-with-course-member-id
+@friendRequestId = replace-with-friend-request-id
+
+### List friends
+GET {{lmsPortalBe_HostAddress}}/api/friends
+Authorization: Bearer {{accessToken}}
+
+### List received friend requests
+GET {{lmsPortalBe_HostAddress}}/api/friends/requests/received
+Authorization: Bearer {{accessToken}}
+
+### List sent friend requests
+GET {{lmsPortalBe_HostAddress}}/api/friends/requests/sent
+Authorization: Bearer {{accessToken}}
+
+### Send a friend request to an approved member of one of your courses
+POST {{lmsPortalBe_HostAddress}}/api/friends/requests/{{memberUserId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "message": "Would you like to connect?"
+}
+
+### Get a friend request
+GET {{lmsPortalBe_HostAddress}}/api/friends/requests/{{friendRequestId}}
+Authorization: Bearer {{accessToken}}
+
+### Accept a received friend request
+POST {{lmsPortalBe_HostAddress}}/api/friends/requests/{{friendRequestId}}/accept
+Authorization: Bearer {{accessToken}}
+
+### Decline a received friend request
+POST {{lmsPortalBe_HostAddress}}/api/friends/requests/{{friendRequestId}}/decline
+Authorization: Bearer {{accessToken}}
+
+### Remove a friend
+DELETE {{lmsPortalBe_HostAddress}}/api/friends/{{memberUserId}}
+Authorization: Bearer {{accessToken}}

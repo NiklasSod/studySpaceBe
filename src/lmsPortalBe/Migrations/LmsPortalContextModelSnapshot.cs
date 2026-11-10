@@ -371,6 +371,59 @@ namespace lmsPortalBe.Migrations
                     b.ToTable("lmsCourseModule", (string)null);
                 });
 
+            modelBuilder.Entity("lmsPortalBe.Models.FriendRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(140)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RecipientUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SenderUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserOneId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserTwoId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientUserId");
+
+                    b.HasIndex("SenderUserId");
+
+                    b.HasIndex("UserOneId", "UserTwoId")
+                        .IsUnique();
+
+                    b.ToTable("lmsFriendRequest", (string)null);
+                });
+
             modelBuilder.Entity("lmsPortalBe.Models.Notification", b =>
                 {
                     b.Property<int>("Id")
@@ -741,6 +794,25 @@ namespace lmsPortalBe.Migrations
                     b.Navigation("Course");
                 });
 
+            modelBuilder.Entity("lmsPortalBe.Models.FriendRequest", b =>
+                {
+                    b.HasOne("lmsPortalBe.Models.ApplicationUser", "Recipient")
+                        .WithMany("ReceivedFriendRequests")
+                        .HasForeignKey("RecipientUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("lmsPortalBe.Models.ApplicationUser", "Sender")
+                        .WithMany("SentFriendRequests")
+                        .HasForeignKey("SenderUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Recipient");
+
+                    b.Navigation("Sender");
+                });
+
             modelBuilder.Entity("lmsPortalBe.Models.Notification", b =>
                 {
                     b.HasOne("lmsPortalBe.Models.ApplicationUser", "Actor")
@@ -872,9 +944,13 @@ namespace lmsPortalBe.Migrations
 
                     b.Navigation("Profile");
 
+                    b.Navigation("ReceivedFriendRequests");
+
                     b.Navigation("ResourceProgress");
 
                     b.Navigation("Resources");
+
+                    b.Navigation("SentFriendRequests");
 
                     b.Navigation("Submissions");
                 });
