@@ -15,6 +15,7 @@ namespace lmsPortalBe.Data
         public DbSet<Activity> Activities { get; set; } = null!;
         public DbSet<Assignment> Assignments { get; set; } = null!;
         public DbSet<UserProfile> UserProfiles { get; set; } = null!;
+        public DbSet<FriendRequest> FriendRequests { get; set; } = null!;
         public DbSet<Submission> Submissions { get; set; } = null!;
         public DbSet<Resource> Resources { get; set; } = null!;
         public DbSet<UserResourceProgress> UserResourceProgress { get; set; } = null!;
@@ -55,6 +56,28 @@ namespace lmsPortalBe.Data
                 entity.HasOne(e => e.User)
                     .WithOne(u => u.Profile)
                     .HasForeignKey<UserProfile>(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<FriendRequest>(entity =>
+            {
+                entity.ToTable("lmsFriendRequest");
+
+                entity.Property(e => e.Status)
+                    .HasConversion<string>()
+                    .HasMaxLength(20);
+
+                entity.HasIndex(e => new { e.UserOneId, e.UserTwoId })
+                    .IsUnique();
+
+                entity.HasOne(e => e.Sender)
+                    .WithMany(u => u.SentFriendRequests)
+                    .HasForeignKey(e => e.SenderUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Recipient)
+                    .WithMany(u => u.ReceivedFriendRequests)
+                    .HasForeignKey(e => e.RecipientUserId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
