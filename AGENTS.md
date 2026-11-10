@@ -89,6 +89,28 @@ dotnet ef migrations add <Name> --project src/lmsPortalBe
   independent when status is `Current` or `Done`; changing status to `CheckLater` or `Archived`
   always clears `IsFavorite`. `Favorite` is not a progress status.
 
+## Friends, friend requests & email privacy
+
+- Students and teachers can send a friend request only to an **approved** member of a course they
+  share (student or teacher role). The request carries an optional message of up to 140 characters
+  (`CreateFriendRequestDto.Message`).
+- `FriendRequest` (table `lmsFriendRequest`) stores `SenderUserId`, `RecipientUserId`, and the
+  normalized ordered pair `UserOneId`/`UserTwoId` with a **unique** index, so there is at most one
+  relationship row per pair. `Status` is `Pending` / `Accepted` / `Declined`.
+- `FriendsController` (`/api/friends`): `GET /` lists friends; `GET /requests/received` and
+  `/requests/sent` list pending requests; `POST /requests/{userId}` sends one;
+  `POST /requests/{id}/accept` and `/decline` respond to it (recipient only); `DELETE /{userId}`
+  removes an accepted friendship. A declined row can be re-sent by either party.
+- Email privacy: `EmailMasker.Mask` renders `firstChar*****@domain`. Non-friends never see a full
+  email in member lists or rosters; accepted friends (and admins) do.
+- `GET /api/users` returns, for non-admins, only approved members of the caller's courses, with
+  masked emails unless friends. `GET /api/users/{id}` requires admin, friendship, or shared-course
+  membership, and masks the email for non-friends. Both `UserDto` and `CourseEnrollmentDto` carry
+  `IsFriend`.
+- `GET /api/profiles/{userId}` returns the full profile only for the owner or an accepted friend;
+  everyone else gets `404` — deliberately not `403`, so it does not leak whether a profile exists.
+  `UserProfileDto` is never exposed to non-friends.
+
 ## Deployment (Railway)
 
 - Production runs on Railway. The database is **SQLite stored on a Railway volume** — the same
@@ -119,4 +141,5 @@ dotnet ef migrations add <Name> --project src/lmsPortalBe
 - Controllers use primary-constructor DI; services use classic constructor injection.
 - External services resolve credentials lazily (`Lazy<>`) so the app boots without API keys and
   only throws when actually used (see `CloudinaryAudioService`, `ResendEmailSender`).
-- `.env` is gitignored — document any new env var in `.env.example` and `README.md`.
+- `.env` is gitignored — document any new env var in `.env.example` (not `README.md`).
+- `README.md` is human-maintained — do not edit it or add feature documentation to it.
